@@ -1,4 +1,7 @@
 {
   "name": "EcowattMobile",
-  "displayName": "EcowattMobile"
+  "displayName": "EcowattMobile",
+  "plugins": [
+    "expo-secure-store"
+  ]
 }

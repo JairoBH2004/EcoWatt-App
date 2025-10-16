@@ -203,3 +203,50 @@ export const getDevices = async (token: string): Promise<Device[]> => {
     throw new Error('Error desconocido al obtener los dispositivos.');
   }
 };
+// Define una interfaz para los datos que recibe la función
+interface DeviceData {
+    token: string;
+    name: string;
+    mac: string;
+    // ip no es necesario según tu API, pero lo dejamos por si lo usas en otro lado
+    ip: string; 
+}
+
+export const registerDevice = async (deviceData: DeviceData) => {
+    const { token, name, mac } = deviceData;
+
+    // La URL de tu API. Asegúrate de que la base sea correcta.
+    const API_URL = 'https://core-cloud.dev/api/v1/devices/';
+
+    // Preparamos el cuerpo (body) con los nombres que la API espera
+    const body = JSON.stringify({
+        dev_hardware_id: mac, // 'mac' se convierte en 'dev_hardware_id'
+        dev_name: name,       // 'name' se convierte en 'dev_name'
+    });
+
+    try {
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                // Así se envía el Bearer Token
+                'Authorization': `Bearer ${token}`,
+            },
+            body: body,
+        });
+
+        if (!response.ok) {
+            // Si la respuesta no es 2xx, lanzamos un error para que el 'catch' lo capture
+            const errorData = await response.json();
+            throw new Error(errorData.detail || 'Error en la respuesta del servidor');
+        }
+
+        // Si la respuesta es 201 (Created), todo salió bien
+        return await response.json();
+
+    } catch (error) {
+        console.error('Error al registrar el dispositivo:', error);
+        // Re-lanzamos el error para que la pantalla pueda mostrar un mensaje al usuario
+        throw error;
+    }
+};
