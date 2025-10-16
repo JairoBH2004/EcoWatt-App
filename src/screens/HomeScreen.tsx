@@ -2,15 +2,19 @@ import React from 'react';
 import { View, Text, ScrollView, StatusBar, TouchableOpacity, ImageBackground, Alert } from 'react-native';
 import Icon from 'react-native-vector-icons/FontAwesome5';
 import { styles } from '../styles/HomeStyles';
+import { StackScreenProps } from '@react-navigation/stack';
+
+// 1. Se importa la lista COMPLETA de pantallas desde el navegador.
+import { RootStackParamList } from '../navigation/AppNavigator';
 
 // Imagen de fondo
 const ECOWATT_BACKGROUND = require('../assets/fondo.jpg');
 
-type Props = {
-  navigation: any;
-};
+// 2. Se define el tipo correcto para los props de esta pantalla.
+type HomeScreenProps = StackScreenProps<RootStackParamList, 'Home'>;
 
-const HomeScreen = ({ navigation }: Props) => {
+// 3. Se aplica el tipo 'HomeScreenProps' al componente.
+const HomeScreen = ({ navigation }: HomeScreenProps) => {
   return (
     <ImageBackground 
       source={ECOWATT_BACKGROUND} 
@@ -80,8 +84,8 @@ const HomeScreen = ({ navigation }: Props) => {
         </View>
       </ScrollView>
 
-      {/* 3. Nota: La barra personalizada flotará por encima del fondo */}
-      {/* No hace falta agregar nada aquí, tu CustomTabBar ya es absolute y con zIndex alto */}
+      {/* 3. Nota: Tu barra de navegación flotará por encima de este contenido */}
+      
     </ImageBackground>
   );
 };

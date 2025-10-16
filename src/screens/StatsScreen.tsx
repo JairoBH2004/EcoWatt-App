@@ -4,7 +4,7 @@ import { View, Text, ImageBackground, StatusBar, ScrollView } from 'react-native
 import { statsStyles } from '../styles/StatsStyles'; 
 
 // RUTA CORREGIDA: Desde screens/StatsScreen.tsx, sube un nivel (..) y entra a assets
-const ECOWATT_BACKGROUND = require('../assets/fondo.png'); 
+const ECOWATT_BACKGROUND = require('../assets/fondo.jpg'); 
 
 const StatsScreen = () => {
   return (

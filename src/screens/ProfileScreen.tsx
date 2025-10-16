@@ -10,7 +10,7 @@ import styles from '../styles/ProfileStyles';
 const PRIMARY_GREEN = '#00FF7F'; // Verde brillante de Ecowatt
 const PRIMARY_BLUE = '#003366';  // Azul oscuro de Ecowatt
 // RUTA CORREGIDA: Desde screens/ProfileScreen.tsx, sube un nivel (..) y entra a assets
-const ECOWATT_BACKGROUND = require('../assets/fondo.png'); 
+const ECOWATT_BACKGROUND = require('../assets/fondo.jpg'); 
 
 interface ProfileData {
     user_name: string;
