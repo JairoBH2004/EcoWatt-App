@@ -1,135 +1,155 @@
 import { StyleSheet } from 'react-native';
 
-// Color semitransparente oscuro (simula el efecto "difuminado" o blur)
+// --- Constantes de Color ---
 const SEMI_TRANSPARENT_BLACK = 'rgba(0, 0, 0, 0.4)';
+const PRIMARY_GREEN = '#00FF7F';
 
 export const styles = StyleSheet.create({
-    // --- ESTILOS PARA EL CONTENEDOR Y ENCABEZADO ---
+    // --- Contenedores y Vistas de Estado ---
     container: {
         flex: 1,
-        // ELIMINAR: backgroundColor: '#003366',
-        padding: 30,
-        paddingTop: 50, // Ajuste para la StatusBar transparente
     },
+    contentContainer: {
+        flexGrow: 1,
+        padding: 20,
+        paddingTop: 50, // Espacio para la barra de estado
+        paddingBottom: 120, // Espacio extra para la barra de navegación flotante
+    },
+    centered: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#0A192F', // Fondo oscuro para pantallas de carga/error
+    },
+    errorText: {
+        color: '#E74C3C',
+        fontSize: 16,
+        marginBottom: 20,
+        textAlign: 'center',
+        paddingHorizontal: 20,
+    },
+
+    // --- Encabezado ---
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 20, // Espacio aumentado
+        marginBottom: 25,
     },
     headerTitle: {
-        fontSize: 24,
+        fontSize: 28,
         fontWeight: 'bold',
         color: '#FFFFFF',
     },
     headerSubtitle: {
-        fontSize: 14,
-        color: '#FFFFFF',
-        opacity: 0.9,
+        fontSize: 16,
+        color: '#E0E0E0',
     },
     menuButton: {
-        padding: 5, // Ajuste de padding
+        padding: 10,
     },
 
-    // --- ESTILO PARA EL CONTENIDO DEL SCROLLVIEW ---
-    contentContainer: {
-    flexGrow: 1, 
-    // AGREGAR ESPACIO EN LA PARTE INFERIOR para la barra de navegación
-    paddingBottom: 100, // <-- CORRECCIÓN CLAVE: Esto empuja el contenido hacia arriba
-},
-
-    // --- TARJETAS CON EFECTO SEMITRANSPARENTE ---
-    
+    // --- Tarjeta Principal ---
     mainCard: {
-        // CAMBIO CLAVE: Fondo semitransparente
-        backgroundColor: SEMI_TRANSPARENT_BLACK, 
+        backgroundColor: SEMI_TRANSPARENT_BLACK,
         borderRadius: 15,
         padding: 20,
         alignItems: 'center',
         marginBottom: 20,
-        // Sombra ajustada para fondo oscuro
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.25, 
-        shadowRadius: 10,
-        elevation: 8, 
     },
     mainCardTitle: {
         fontSize: 16,
-        color: '#E0E0E0', // Texto claro
-        marginBottom: 5,
+        color: '#E0E0E0',
+        marginBottom: 10,
     },
     projectedCost: {
         fontSize: 42,
         fontWeight: 'bold',
-        color: '#00FF7F', // Verde brillante para resaltar
+        color: PRIMARY_GREEN,
     },
     comparisonText: {
         fontSize: 14,
-        color: '#B0B0B0', // Texto claro
+        color: '#B0B0B0',
         marginTop: 5,
     },
-    
+
+    // --- Contenedor de Tarjetas Pequeñas ---
     smallCardsContainer: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         marginBottom: 20,
     },
     smallCard: {
-        // CAMBIO CLAVE: Fondo semitransparente
-        backgroundColor: SEMI_TRANSPARENT_BLACK, 
-        borderRadius: 15,
-        padding: 20,
-        alignItems: 'center',
-        width: '48%',
-        // Sombra ajustada
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.25,
-        shadowRadius: 5,
-        elevation: 8,
-    },
-    smallCardValue: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#FFFFFF', // Texto blanco
-    },
-    smallCardLabel: {
-        fontSize: 14,
-        color: '#B0B0B0', // Texto claro
-        marginTop: 5,
-    },
-    
-    analysisCard: {
-        // CAMBIO CLAVE: Fondo semitransparente
         backgroundColor: SEMI_TRANSPARENT_BLACK,
         borderRadius: 15,
         padding: 20,
         alignItems: 'center',
-        justifyContent: 'center',
-        height: 200,
-        marginBottom: 20,
+        width: '48%', // Ocupa casi la mitad del espacio
     },
-    analysisTitle: {
-        fontSize: 18,
+    smallCardValue: {
+        fontSize: 24,
         fontWeight: 'bold',
-        color: '#FFFFFF', // Texto blanco
-        marginBottom: 10,
+        color: '#FFFFFF',
+        marginTop: 8,
     },
-    
-    // Se deja esta tarjeta con fondo claro para crear contraste
+    smallCardLabel: {
+        fontSize: 14,
+        color: '#B0B0B0',
+        marginTop: 5,
+        textAlign: 'center',
+    },
+
+    // --- Tarjeta de Recomendación ---
     recommendationCard: {
-        backgroundColor: 'rgba(230, 255, 230, 0.9)', 
+        backgroundColor: 'rgba(230, 255, 230, 0.9)', // Fondo claro para contraste
         borderRadius: 15,
-        padding: 15,
+        padding: 20,
         flexDirection: 'row',
         alignItems: 'center',
     },
     recommendationText: {
         flex: 1,
         marginLeft: 15,
-        fontSize: 14,
-        color: '#003366',
+        fontSize: 15,
+        color: '#003366', // Texto oscuro para legibilidad
+        lineHeight: 22,
     },
-    
+    // --- Estilos para la vista de "Añadir Dispositivo" ---
+    centeredContent: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+    actionTitle: {
+        fontSize: 22,
+        fontWeight: 'bold',
+        color: '#FFFFFF',
+        marginTop: 20,
+        textAlign: 'center',
+    },
+    actionSubtitle: {
+        fontSize: 16,
+        color: '#E0E0E0',
+        marginTop: 10,
+        textAlign: 'center',
+        marginBottom: 30,
+        lineHeight: 24,
+    },
+    addButton: {
+        backgroundColor: PRIMARY_GREEN,
+        paddingHorizontal: 40,
+        paddingVertical: 15,
+        borderRadius: 10,
+        shadowColor: '#00FF7F',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.8,
+        shadowRadius: 15,
+        elevation: 10,
+    },
+    addButtonText: {
+        color: '#003366', // Azul oscuro
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
 });

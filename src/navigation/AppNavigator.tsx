@@ -1,52 +1,134 @@
 import React from 'react';
+import { View, Platform } from 'react-native';
 import { createStackNavigator } from '@react-navigation/stack';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useAuthStore } from '../store/useAuthStore';
 
-// Importa TODAS tus pantallas
+// --- Pantallas ---
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import HomeScreen from '../screens/HomeScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import StatsScreen from '../screens/StatsScreen';
+import AddDeviceScreen from '../screens/AddDeviceScreen';
 
-// 1. Creamos el mapa con TODAS las pantallas
+// --- Tipos ---
 export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
+  MainApp: undefined;
+  AddDevice: undefined;
+};
+
+export type RootTabParamList = {
   Home: undefined;
   Profile: undefined;
   Stats: undefined;
 };
 
-// 2. Le pasamos el mapa al navegador
 const Stack = createStackNavigator<RootStackParamList>();
+const Tab = createBottomTabNavigator<RootTabParamList>();
 
+// --- Tabs (barra inferior) ---
+function MainAppTabs() {
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        headerShown: false,
+        tabBarShowLabel: false,
+        tabBarStyle: {
+          position: 'absolute',
+          bottom: Platform.OS === 'ios' ? 30 : 20,
+          left: 20,
+          right: 20,
+          backgroundColor: 'rgba(40, 40, 40, 0.9)',
+          borderRadius: 30,
+          height: 70,
+          borderTopWidth: 0,
+          elevation: 8,
+          shadowColor: '#00FF7F',
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 0.4,
+          shadowRadius: 8,
+        },
+        tabBarItemStyle: {
+          justifyContent: 'center',
+          alignItems: 'center',
+          paddingTop: 8,
+        },
+        tabBarIcon: ({ focused }) => {
+          let iconName: string = '';
+
+          switch (route.name) {
+            case 'Home':
+              iconName = focused ? 'home' : 'home-outline';
+              break;
+            case 'Stats':
+              iconName = focused ? 'bar-chart' : 'bar-chart-outline';
+              break;
+            case 'Profile':
+              iconName = focused ? 'person-circle' : 'person-circle-outline';
+              break;
+          }
+
+          const iconColor = focused ? '#00FF7F' : '#a0a0a0';
+          const iconSize = focused ? 32 : 26;
+
+          return (
+            <View
+              style={{
+                alignItems: 'center',
+                justifyContent: 'center',
+                shadowColor: focused ? '#00FF7F' : 'transparent',
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: focused ? 0.8 : 0,
+                shadowRadius: focused ? 10 : 0,
+                elevation: focused ? 12 : 0,
+              }}
+            >
+              <Ionicons name={iconName} size={iconSize} color={iconColor} />
+            </View>
+          );
+        },
+      })}
+    >
+      <Tab.Screen name="Home" component={HomeScreen} />
+      <Tab.Screen name="Stats" component={StatsScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} />
+    </Tab.Navigator>
+  );
+}
+
+// --- Navegador Principal ---
 const AppNavigator = () => {
-  // Obtenemos el único estado que necesitamos
   const { isAuthenticated } = useAuthStore();
 
   return (
-    <Stack.Navigator>
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+      }}
+    >
       {isAuthenticated ? (
-        // Si el usuario está autenticado, muestra estas pantallas
         <>
-          <Stack.Screen name="Home" component={HomeScreen} options={{ title: 'Inicio' }} />
-          <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: 'Perfil' }} />
-          <Stack.Screen name="Stats" component={StatsScreen} options={{ title: 'Estadísticas' }} />
+          <Stack.Screen name="MainApp" component={MainAppTabs} />
+          <Stack.Screen
+            name="AddDevice"
+            component={AddDeviceScreen}
+            options={{
+              headerShown: true,
+              title: 'Añadir Dispositivo',
+              headerStyle: { backgroundColor: '#1E2A47' },
+              headerTintColor: '#FFF',
+              headerBackTitle: '', // ✅ reemplaza el texto “Back” por vacío (oculta el título)
+            }}
+          />
         </>
       ) : (
-        // Si no está autenticado, muestra las de login/registro
         <>
-          <Stack.Screen 
-            name="Login" 
-            component={LoginScreen} 
-            options={{ headerShown: false }} // Ocultamos la barra en el Login
-          />
-          <Stack.Screen 
-            name="Register" 
-            component={RegisterScreen} 
-            options={{ title: 'Crear Cuenta' }} // Le ponemos un título a la barra
-          />
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Register" component={RegisterScreen} />
         </>
       )}
     </Stack.Navigator>

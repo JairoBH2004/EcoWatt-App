@@ -1,8 +1,25 @@
+// --- HELPER PARA MANEJAR ERRORES DE FORMA CENTRALIZADA ---
+// Esta función evita repetir la misma lógica de errores en todas las llamadas a la API.
+const handleApiError = async (response: Response) => {
+  const data = await response.json();
+  let errorMessage = 'Ocurrió un error inesperado.';
+
+  if (data.detail) {
+    if (Array.isArray(data.detail) && data.detail[0]?.msg) {
+      errorMessage = data.detail[0].msg;
+    } else if (typeof data.detail === 'string') {
+      errorMessage = data.detail;
+    }
+  }
+  throw new Error(errorMessage);
+};
+
+
+// --- CÓDIGO DEL SERVICIO ---
+
 const API_BASE_URL = 'https://core-cloud.dev';
 
 // --- INTERFACES ---
-
-// Datos para registro de usuario
 interface UserRegistrationData {
   user_name: string;
   user_email: string;
@@ -11,47 +28,55 @@ interface UserRegistrationData {
   user_billing_day: number;
 }
 
-// Datos para login
 interface LoginCredentials {
   user_email: string;
   user_password: string;
 }
 
-// Respuesta del login
 interface LoginResponse {
   access_token: string;
   refresh_token: string;
 }
 
-// --- REGISTRO DE USUARIO ---
+export interface UserProfile {
+  user_id: number;
+  user_name: string;
+  user_email: string;
+  user_trf_rate: string;
+  user_billing_day: number;
+}
 
+interface CarbonFootprint {
+  co2_emitted_kg: number;
+  equivalent_trees_absorption_per_year: number;
+}
+
+export interface DashboardSummary {
+  kwh_consumed_cycle: number;
+  estimated_cost_mxn: number;
+  billing_cycle_start: string;
+  billing_cycle_end: string;
+  days_in_cycle: number;
+  current_tariff: string;
+  carbon_footprint: CarbonFootprint;
+  latest_recommendation: string;
+}
+
+
+// --- REGISTRO DE USUARIO ---
 export const registerUser = async (userData: UserRegistrationData) => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/v1/users/`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(userData),
     });
 
-    const data = await response.json();
-
     if (!response.ok) {
-      let errorMessage = 'Ocurrió un error en el registro.';
-
-      if (data.detail) {
-        if (Array.isArray(data.detail) && data.detail.length > 0) {
-          errorMessage = data.detail[0]?.msg || errorMessage;
-        } else if (typeof data.detail === 'string') {
-          errorMessage = data.detail;
-        }
-      }
-
-      throw new Error(errorMessage);
+      await handleApiError(response);
     }
 
-    return data;
+    return await response.json();
   } catch (error) {
     if (error instanceof Error) throw error;
     throw new Error('Error desconocido al registrar usuario.');
@@ -60,36 +85,19 @@ export const registerUser = async (userData: UserRegistrationData) => {
 
 
 // --- LOGIN DE USUARIO ---
-
-export const loginUser = async (
-  credentials: LoginCredentials
-): Promise<LoginResponse> => {
+export const loginUser = async (credentials: LoginCredentials): Promise<LoginResponse> => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(credentials),
     });
 
-    const data = await response.json();
-
     if (!response.ok) {
-      let errorMessage = 'Credenciales no válidas.';
-
-      if (data.detail) {
-        if (typeof data.detail === 'string') {
-          errorMessage = data.detail;
-        } else if (Array.isArray(data.detail) && data.detail[0]?.msg) {
-          errorMessage = data.detail[0].msg;
-        }
-      }
-
-      throw new Error(errorMessage);
+      await handleApiError(response);
     }
 
-    return data as LoginResponse;
+    return await response.json() as LoginResponse;
   } catch (error) {
     if (error instanceof Error) throw error;
     throw new Error('Error desconocido al iniciar sesión.');
@@ -97,65 +105,101 @@ export const loginUser = async (
 };
 
 
-
 // --- LOGOUT DE USUARIO ---
-
 export const logoutUser = async (refreshToken: string) => {
-    try {
-        // Corregimos la petición para que coincida con la documentación
-        const response = await fetch(`${API_BASE_URL}/api/v1/auth/logout`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            // Enviamos el refresh_token en el body, no el token de acceso en los headers
-            body: JSON.stringify({
-                refresh_token: refreshToken
-            })
-        });
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/auth/logout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
 
-        if (!response.ok) {
-            console.error('El logout en el servidor falló, pero se procederá localmente.');
-        }
-
-    } catch (error) {
-        console.error('Error de red al intentar cerrar sesión:', error);
-        throw error;
+    if (!response.ok) {
+      console.error('El logout en el servidor falló, pero se procederá localmente.');
     }
+  } catch (error) {
+    console.error('Error de red al intentar cerrar sesión:', error);
+  }
 };
 
+
 // --- PERFIL DE USUARIO ---
-interface UserProfile {
-  id: number;
-  user_name: string;
-  user_email: string;
-  user_trf_rate: string;
-  user_billing_day: number;
-  created_at?: string;
-  updated_at?: string;
+export const getUserProfile = async (token: string): Promise<UserProfile> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/me`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      await handleApiError(response);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof Error) throw error;
+    throw new Error('Error desconocido al obtener el perfil.');
+  }
+};
+
+
+// --- RESUMEN DEL DASHBOARD ---
+export const getDashboardSummary = async (token: string): Promise<DashboardSummary> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/dashboard/summary`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      await handleApiError(response);
+    }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof Error) throw error;
+    throw new Error('Error desconocido al obtener los datos del dashboard.');
+  }
+};
+
+// --- 👇 NUEVO CÓDIGO AÑADIDO AQUÍ 👇 ---
+
+// --- INTERFAZ PARA UN DISPOSITIVO ---
+// Corregida para coincidir exactamente con la respuesta de tu API.
+export interface Device {
+  dev_hardware_id: string;
+  dev_name: string;
+  dev_id: number;
+  dev_user_id: number;
+  dev_status: boolean;
+  dev_brand: string;
+  dev_model: string;
 }
 
-export const getUserProfile = async (token: string): Promise<UserProfile> => {
-    try {
-        const response = await fetch(`${API_BASE_URL}/api/v1/users/me`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                // Las rutas protegidas necesitan el token de acceso en la cabecera
-                'Authorization': `Bearer ${token}`,
-            },
-        });
+// --- FUNCIÓN PARA OBTENER LA LISTA DE DISPOSITIVOS ---
+export const getDevices = async (token: string): Promise<Device[]> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/devices/`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+    });
 
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.detail || 'No se pudo obtener la información del perfil.');
-        }
-
-        return data;
-
-    } catch (error) {
-        if (error instanceof Error) throw error;
-        throw new Error('Error desconocido al obtener el perfil.');
+    if (!response.ok) {
+      await handleApiError(response);
     }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof Error) throw error;
+    throw new Error('Error desconocido al obtener los dispositivos.');
+  }
 };
