@@ -56,7 +56,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
                 user_password: password 
             });
             
-            login(data.access_token, data.refresh_token);
+            login(data.access_token, data.refresh_token,"","");
 
         } catch (err: any) {
               console.log('Error en login:', err);

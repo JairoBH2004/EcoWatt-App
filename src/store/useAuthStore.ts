@@ -1,30 +1,14 @@
 import { create } from 'zustand';
-import { persist, StateStorage } from 'zustand/middleware';
-import * as SecureStore from 'expo-secure-store';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// --- Placeholder para tu función de API ---
-// Esta función debería hacer una llamada a tu backend para invalidar el refresh token.
+// --- Simulación de cierre de sesión remoto ---
 const logoutUser = async (refreshToken: string) => {
   console.log('Llamando a la API para invalidar el token:', refreshToken);
-  // Ejemplo:
-  // await api.post('/auth/logout', { refreshToken });
   return Promise.resolve();
 };
 
-// --- Adaptador para usar SecureStore con Zustand ---
-const customStorage: StateStorage = {
-  getItem: async (name: string): Promise<string | null> => {
-    return await SecureStore.getItemAsync(name);
-  },
-  setItem: async (name: string, value: string): Promise<void> => {
-    await SecureStore.setItemAsync(name, value);
-  },
-  removeItem: async (name: string): Promise<void> => {
-    await SecureStore.deleteItemAsync(name);
-  },
-};
-
-// --- Definición de la Interfaz del Estado ---
+// --- Interfaz de AuthState ---
 interface AuthState {
   isAuthenticated: boolean;
   token: string | null;
@@ -35,7 +19,7 @@ interface AuthState {
   logout: () => Promise<void>;
 }
 
-// --- Creación del Store con Persistencia Segura ---
+// --- Creación del Store ---
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
@@ -49,7 +33,7 @@ export const useAuthStore = create<AuthState>()(
         set({
           isAuthenticated: true,
           token: accessToken,
-          refreshToken: refreshToken,
+          refreshToken,
           wifiSsid: ssid,
           wifiPassword: password,
         }),
@@ -58,13 +42,11 @@ export const useAuthStore = create<AuthState>()(
         const refreshToken = get().refreshToken;
         try {
           if (refreshToken) {
-            // Llama a tu API para invalidar el token en el backend
             await logoutUser(refreshToken);
           }
         } catch (error) {
           console.warn('Error al cerrar sesión en el servidor:', error);
         } finally {
-          // Limpia el estado local sin importar el resultado de la API
           set({
             isAuthenticated: false,
             token: null,
@@ -76,8 +58,9 @@ export const useAuthStore = create<AuthState>()(
       },
     }),
     {
-      name: 'auth-storage', // Nombre de la clave en el almacenamiento
-      storage: customStorage, // Usar el adaptador de SecureStore
+      name: 'auth-storage',
+      // ✅ Usa AsyncStorage como almacenamiento persistente
+      storage: createJSONStorage(() => AsyncStorage),
     }
   )
 );

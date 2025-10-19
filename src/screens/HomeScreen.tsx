@@ -8,7 +8,11 @@ import Icon from 'react-native-vector-icons/FontAwesome5';
 
 import { styles } from '../styles/HomeStyles';
 import { useAuthStore } from '../store/useAuthStore';
-import { getDashboardSummary, DashboardSummary, getUserProfile, UserProfile, getDevices, Device } from '../services/authService';
+import {
+    getDashboardSummary, DashboardSummary,
+    getUserProfile, UserProfile,
+    getDevices, Device
+} from '../services/authService';
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { RootTabParamList } from '../navigation/AppNavigator';
 
@@ -27,34 +31,45 @@ const HomeScreen = ({ navigation }: HomeScreenProps) => {
 
     useEffect(() => {
         const loadInitialData = async () => {
-            if (!token) { logout(); return; }
+            if (!token) {
+                logout();
+                return;
+            }
 
             setIsLoading(true);
             setError('');
+
             try {
-                // 1. Primero, pedimos el perfil y la lista de dispositivos.
-                const [profileData, devicesData] = await Promise.all([
-                    getUserProfile(token),
-                    getDevices(token)
-                ]);
-
+                const profileData = await getUserProfile(token);
                 setProfile(profileData);
-                setDevices(devicesData);
 
-                // 2. Comprobamos si hay dispositivos.
-                if (devicesData.length > 0) {
-                    // 3. SOLO SI HAY dispositivos, pedimos el resumen del dashboard.
-                    const summaryData = await getDashboardSummary(token);
-                    setSummary(summaryData);
+                let devicesData: Device[] = [];
+                try {
+                    devicesData = await getDevices(token);
+                    console.log("Dispositivos obtenidos:", devicesData);
+                    setDevices(devicesData);
+
+                    if (devicesData.length > 0) {
+                        const summaryData = await getDashboardSummary(token);
+                        setSummary(summaryData);
+                    } else {
+                        setSummary(null);
+                    }
+
+                } catch (deviceError: any) {
+                    console.log("Error obteniendo dispositivos:", deviceError);
+                    if (deviceError.message?.toLowerCase().includes('not found') || deviceError.message.includes('404')) {
+                        setDevices([]);
+                        setSummary(null);
+                    } else {
+                        throw deviceError;
+                    }
                 }
 
             } catch (err: any) {
-                if (err.message && (err.message.toLowerCase().includes('not found') || err.message.includes('404'))) {
-                    setDevices([]);
-                } else {
-                    setError(err.message || "No se pudieron cargar los datos.");
-                    if (err.message.includes('401')) logout();
-                }
+                console.log("Error general:", err);
+                setError(err.message || "No se pudieron cargar los datos.");
+                if (err.message.includes('401')) logout();
             } finally {
                 setIsLoading(false);
             }
@@ -76,72 +91,94 @@ const HomeScreen = ({ navigation }: HomeScreenProps) => {
         return (
             <View style={styles.centered}>
                 <Text style={styles.errorText}>{error}</Text>
-                <Button title="Cerrar Sesión" onPress={logout} color="#E74C3C" />
+                <TouchableOpacity 
+                    style={[styles.addButton, {marginVertical: 10}]} 
+                    onPress={() => navigation.navigate('AddDevice')}
+                >
+                    <Text style={styles.addButtonText}>Añadir Dispositivo</Text>
+                </TouchableOpacity>
+                <View style={{marginTop: 20}}>
+                    <Button title="Cerrar Sesión" onPress={logout} color="#E74C3C" />
+                </View>
             </View>
         );
     }
 
     const renderContent = () => {
         if (devices.length === 0) {
-            // VISTA CUANDO NO HAY DISPOSITIVOS
             return (
                 <View style={styles.centeredContent}>
                     <Icon name="plus-circle" size={50} color={PRIMARY_GREEN} />
                     <Text style={styles.actionTitle}>¡Bienvenido a EcoWatt!</Text>
                     <Text style={styles.actionSubtitle}>
-                        Parece que aún no tienes dispositivos. ¡Añade el primero para empezar a monitorear!
+                        No tienes ningún dispositivo, agrega uno para comenzar.
                     </Text>
                     <TouchableOpacity 
-                        style={styles.addButton} 
-                        onPress={() => Alert.alert("Próximamente", "Aquí te llevaremos a la pantalla para añadir tu Shelly.")}
+                        style={[styles.addButton, {marginVertical: 20}]} 
+                        onPress={() => navigation.navigate('AddDevice')}
                     >
                         <Text style={styles.addButtonText}>Añadir Dispositivo</Text>
                     </TouchableOpacity>
+                    <View style={{marginTop: 40}}>
+                        <Button title="Cerrar Sesión" onPress={logout} color="#E74C3C" />
+                    </View>
                 </View>
             );
-        } else {
-            // VISTA NORMAL DEL DASHBOARD
-            return (
-                <>
-                    <View style={styles.header}>
-                        <View>
-                            <Text style={styles.headerTitle}>¡Hola, {profile?.user_name?.split(' ')[0]}!</Text>
-                            <Text style={styles.headerSubtitle}>Tu resumen de energía</Text>
-                        </View>
-                        <TouchableOpacity style={styles.menuButton} onPress={() => Alert.alert('Notificaciones', 'No tienes notificaciones nuevas.')}>
-                            <Icon name="bell" size={24} color="#FFFFFF" solid />
-                        </TouchableOpacity>
-                    </View>
+        } 
+return (
+    <>
+        <View style={styles.header}>
+            <View>
+                <Text style={styles.headerTitle}>¡Hola, {profile?.user_name?.split(' ')[0]}!</Text>
+                <Text style={styles.headerSubtitle}>Tu resumen de energía</Text>
+            </View>
+            <View style={styles.headerIconsContainer}>
+                <TouchableOpacity style={styles.menuButton} onPress={() => navigation.navigate('AddDevice')}>
+                    <Icon name="plus" size={24} color="#FFFFFF" />
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.menuButton, { marginLeft: 16 }]} onPress={() => Alert.alert('Notificaciones', 'No tienes notificaciones nuevas.')}>
+                    <Icon name="bell" size={24} color="#FFFFFF" solid />
+                </TouchableOpacity>
+            </View>
+        </View>
 
-                    <View style={styles.mainCard}>
-                        <Text style={styles.mainCardTitle}>Costo Estimado del Periodo</Text>
-                        <Text style={styles.projectedCost}>${summary?.estimated_cost_mxn?.toFixed(2) || '0.00'} MXN</Text>
-                        <Text style={styles.comparisonText}>Días en el ciclo: {summary?.days_in_cycle || 0}</Text>
-                    </View>
+        <View style={styles.mainCard}>
+            <Text style={styles.mainCardTitle}>Costo Estimado del Periodo</Text>
+            <Text style={styles.projectedCost}>${summary?.estimated_cost_mxn?.toFixed(2) || '0.00'} MXN</Text>
+            <Text style={styles.comparisonText}>Días en el ciclo: {summary?.days_in_cycle || 0}</Text>
+        </View>
 
-                    <View style={styles.smallCardsContainer}>
-                        <View style={styles.smallCard}><Icon name="bolt" size={24} color={PRIMARY_GREEN} /><Text style={styles.smallCardValue}>{summary?.kwh_consumed_cycle || 0} kWh</Text><Text style={styles.smallCardLabel}>Consumo del Ciclo</Text></View>
-                        <View style={styles.smallCard}><Icon name="leaf" size={24} color={PRIMARY_GREEN} /><Text style={styles.smallCardValue}>{summary?.carbon_footprint?.co2_emitted_kg?.toFixed(1) || 0} kg</Text><Text style={styles.smallCardLabel}>CO₂ Emitido</Text></View>
-                    </View>
+        {/* --- Dos recuadros pequeños arriba de la gráfica --- */}
+        <View style={styles.smallCardsContainer}>
+            <View style={styles.smallCard}>
+                <Icon name="bolt" size={24} color={PRIMARY_GREEN} />
+                <Text style={styles.smallCardValue}>{summary?.kwh_consumed_cycle || 0} kWh</Text>
+                <Text style={styles.smallCardLabel}>Consumo del Ciclo</Text>
+            </View>
+            <View style={styles.smallCard}>
+                <Icon name="leaf" size={24} color={PRIMARY_GREEN} />
+                <Text style={styles.smallCardValue}>{summary?.carbon_footprint?.co2_emitted_kg?.toFixed(1) || 0} kg</Text>
+                <Text style={styles.smallCardLabel}>CO₂ Emitido</Text>
+            </View>
+        </View>
 
-                    <View style={styles.recommendationCard}><Icon name="lightbulb" size={24} color="#003366" /><Text style={styles.recommendationText}>{summary?.latest_recommendation || 'No hay recomendaciones.'}</Text></View>
-                </>
-            );
-        }
+        {/* --- Recuadro de la gráfica debajo de los pequeños --- */}
+        <View style={styles.graphPlaceholder}>
+            <Text style={styles.graphPlaceholderText}>Aquí va la gráfica</Text>
+        </View>
+
+        <View style={styles.recommendationCard}>
+            <Icon name="lightbulb" size={24} color="#003366" />
+            <Text style={styles.recommendationText}>{summary?.latest_recommendation || 'No hay recomendaciones.'}</Text>
+        </View>
+    </>
+);
+
     };
 
-    // --- 👇 CORRECCIÓN APLICADA AQUÍ 👇 ---
     return (
-        <ImageBackground 
-            source={ECOWATT_BACKGROUND} 
-            style={styles.container} // Asegúrate que el estilo tenga flex: 1
-            resizeMode="cover"
-        >
-            <StatusBar 
-                barStyle="light-content"
-                backgroundColor="transparent"
-                translucent={true}
-            />
+        <ImageBackground source={ECOWATT_BACKGROUND} style={styles.container} resizeMode="cover">
+            <StatusBar barStyle="light-content" backgroundColor="transparent" translucent={true} />
             <SafeAreaView style={{flex: 1}}>
                 <ScrollView contentContainerStyle={styles.contentContainer}>
                     {renderContent()}

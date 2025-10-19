@@ -47,7 +47,7 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
                 user_name: name,
                 user_email: email,
                 user_password: password,
-                user_trf_rate: '1F',
+                user_trf_rate: '1f',
                 user_billing_day: parseInt(cutDay, 10),
             });
             Alert.alert(

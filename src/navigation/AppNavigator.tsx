@@ -21,10 +21,12 @@ export type RootStackParamList = {
   AddDevice: undefined;
 };
 
+// ✅ **AQUÍ ESTÁ LA CORRECCIÓN**
 export type RootTabParamList = {
   Home: undefined;
   Profile: undefined;
   Stats: undefined;
+  AddDevice: undefined; // <-- AÑADE ESTA LÍNEA
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -121,7 +123,7 @@ const AppNavigator = () => {
               title: 'Añadir Dispositivo',
               headerStyle: { backgroundColor: '#1E2A47' },
               headerTintColor: '#FFF',
-              headerBackTitle: '', // ✅ reemplaza el texto “Back” por vacío (oculta el título)
+              headerBackTitle:'', // Oculta el texto "Atrás" en iOS
             }}
           />
         </>

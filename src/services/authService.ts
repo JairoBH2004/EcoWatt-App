@@ -62,8 +62,25 @@ export interface DashboardSummary {
   latest_recommendation: string;
 }
 
+export interface Device {
+  dev_id: number;
+  dev_user_id: number;
+  dev_hardware_id: string;
+  dev_name: string;
+  dev_status: boolean;
+  dev_brand: string;
+  dev_model: string;
+}
 
-// --- REGISTRO DE USUARIO ---
+// Interfaz para los datos necesarios al registrar un dispositivo.
+interface DeviceRegistrationData {
+  name: string;
+  mac: string;
+}
+
+
+// --- FUNCIONES DE AUTENTICACIÓN Y USUARIO ---
+
 export const registerUser = async (userData: UserRegistrationData) => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/v1/users/`, {
@@ -75,7 +92,6 @@ export const registerUser = async (userData: UserRegistrationData) => {
     if (!response.ok) {
       await handleApiError(response);
     }
-
     return await response.json();
   } catch (error) {
     if (error instanceof Error) throw error;
@@ -83,8 +99,6 @@ export const registerUser = async (userData: UserRegistrationData) => {
   }
 };
 
-
-// --- LOGIN DE USUARIO ---
 export const loginUser = async (credentials: LoginCredentials): Promise<LoginResponse> => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
@@ -96,7 +110,6 @@ export const loginUser = async (credentials: LoginCredentials): Promise<LoginRes
     if (!response.ok) {
       await handleApiError(response);
     }
-
     return await response.json() as LoginResponse;
   } catch (error) {
     if (error instanceof Error) throw error;
@@ -104,8 +117,6 @@ export const loginUser = async (credentials: LoginCredentials): Promise<LoginRes
   }
 };
 
-
-// --- LOGOUT DE USUARIO ---
 export const logoutUser = async (refreshToken: string) => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/v1/auth/logout`, {
@@ -122,14 +133,11 @@ export const logoutUser = async (refreshToken: string) => {
   }
 };
 
-
-// --- PERFIL DE USUARIO ---
 export const getUserProfile = async (token: string): Promise<UserProfile> => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/v1/users/me`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
       },
     });
@@ -137,7 +145,6 @@ export const getUserProfile = async (token: string): Promise<UserProfile> => {
     if (!response.ok) {
       await handleApiError(response);
     }
-
     return await response.json();
   } catch (error) {
     if (error instanceof Error) throw error;
@@ -146,13 +153,13 @@ export const getUserProfile = async (token: string): Promise<UserProfile> => {
 };
 
 
-// --- RESUMEN DEL DASHBOARD ---
+// --- FUNCIONES DEL DASHBOARD ---
+
 export const getDashboardSummary = async (token: string): Promise<DashboardSummary> => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/v1/dashboard/summary`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
       },
     });
@@ -160,7 +167,6 @@ export const getDashboardSummary = async (token: string): Promise<DashboardSumma
     if (!response.ok) {
       await handleApiError(response);
     }
-
     return await response.json();
   } catch (error) {
     if (error instanceof Error) throw error;
@@ -168,27 +174,14 @@ export const getDashboardSummary = async (token: string): Promise<DashboardSumma
   }
 };
 
-// --- 👇 NUEVO CÓDIGO AÑADIDO AQUÍ 👇 ---
 
-// --- INTERFAZ PARA UN DISPOSITIVO ---
-// Corregida para coincidir exactamente con la respuesta de tu API.
-export interface Device {
-  dev_hardware_id: string;
-  dev_name: string;
-  dev_id: number;
-  dev_user_id: number;
-  dev_status: boolean;
-  dev_brand: string;
-  dev_model: string;
-}
+// --- FUNCIONES DE DISPOSITIVOS ---
 
-// --- FUNCIÓN PARA OBTENER LA LISTA DE DISPOSITIVOS ---
 export const getDevices = async (token: string): Promise<Device[]> => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/v1/devices/`, {
       method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
       },
     });
@@ -196,57 +189,46 @@ export const getDevices = async (token: string): Promise<Device[]> => {
     if (!response.ok) {
       await handleApiError(response);
     }
-
     return await response.json();
   } catch (error) {
     if (error instanceof Error) throw error;
     throw new Error('Error desconocido al obtener los dispositivos.');
   }
 };
-// Define una interfaz para los datos que recibe la función
-interface DeviceData {
-    token: string;
-    name: string;
-    mac: string;
-    // ip no es necesario según tu API, pero lo dejamos por si lo usas en otro lado
-    ip: string; 
-}
 
-export const registerDevice = async (deviceData: DeviceData) => {
-    const { token, name, mac } = deviceData;
+/**
+ * Registra un nuevo dispositivo.
+ * Se ha refactorizado para ser consistente con las demás funciones.
+ * @param token El token de autenticación del usuario.
+ * @param deviceData Un objeto con el nombre (name) y la MAC (mac) del dispositivo.
+ * @returns El objeto del dispositivo recién creado.
+ */
+export const registerDevice = async (token: string, deviceData: DeviceRegistrationData): Promise<Device> => {
+  // Mapeamos los nombres de nuestro objeto a los que espera la API.
+  const body = JSON.stringify({
+    dev_hardware_id: deviceData.mac,
+    dev_name: deviceData.name,
+  });
 
-    // La URL de tu API. Asegúrate de que la base sea correcta.
-    const API_URL = 'https://core-cloud.dev/api/v1/devices/';
-
-    // Preparamos el cuerpo (body) con los nombres que la API espera
-    const body = JSON.stringify({
-        dev_hardware_id: mac, // 'mac' se convierte en 'dev_hardware_id'
-        dev_name: name,       // 'name' se convierte en 'dev_name'
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/devices/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: body,
     });
 
-    try {
-        const response = await fetch(API_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                // Así se envía el Bearer Token
-                'Authorization': `Bearer ${token}`,
-            },
-            body: body,
-        });
-
-        if (!response.ok) {
-            // Si la respuesta no es 2xx, lanzamos un error para que el 'catch' lo capture
-            const errorData = await response.json();
-            throw new Error(errorData.detail || 'Error en la respuesta del servidor');
-        }
-
-        // Si la respuesta es 201 (Created), todo salió bien
-        return await response.json();
-
-    } catch (error) {
-        console.error('Error al registrar el dispositivo:', error);
-        // Re-lanzamos el error para que la pantalla pueda mostrar un mensaje al usuario
-        throw error;
+    // Usamos el mismo manejador de errores que las otras funciones.
+    if (!response.ok) {
+      await handleApiError(response);
     }
+
+    return await response.json();
+  } catch (error) {
+    // Usamos el mismo bloque catch que las otras funciones.
+    if (error instanceof Error) throw error;
+    throw new Error('Error desconocido al registrar el dispositivo.');
+  }
 };

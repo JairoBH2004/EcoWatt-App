@@ -45,6 +45,11 @@ export const styles = StyleSheet.create({
         fontSize: 16,
         color: '#E0E0E0',
     },
+    // ✅ **ESTILO QUE FALTA**
+    headerIconsContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
     menuButton: {
         padding: 10,
     },
@@ -114,6 +119,7 @@ export const styles = StyleSheet.create({
         color: '#003366', // Texto oscuro para legibilidad
         lineHeight: 22,
     },
+    
     // --- Estilos para la vista de "Añadir Dispositivo" ---
     centeredContent: {
         flex: 1,
@@ -152,4 +158,18 @@ export const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: 'bold',
     },
+    // --- Recuadro de la gráfica
+graphPlaceholder: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 15,
+    height: 200,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+},
+graphPlaceholderText: {
+    color: '#FFF',
+    fontSize: 16,
+},
+
 });
