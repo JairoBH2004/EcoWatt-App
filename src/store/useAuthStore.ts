@@ -15,8 +15,14 @@ interface AuthState {
   refreshToken: string | null;
   wifiSsid: string | null;
   wifiPassword: string | null;
-  login: (accessToken: string, refreshToken: string, ssid: string, password: string) => void;
+
+  // 👇 1. Se actualiza la firma de login (sin WiFi)
+  login: (accessToken: string, refreshToken: string) => void;
+  
   logout: () => Promise<void>;
+  
+  // 👇 2. Se añade la nueva función para el WiFi
+  setWifiCredentials: (ssid: string, password: string) => void; 
 }
 
 // --- Creación del Store ---
@@ -29,13 +35,12 @@ export const useAuthStore = create<AuthState>()(
       wifiSsid: null,
       wifiPassword: null,
 
-      login: (accessToken, refreshToken, ssid, password) =>
+      // 👇 3. Login ya NO maneja el WiFi
+      login: (accessToken, refreshToken) =>
         set({
           isAuthenticated: true,
           token: accessToken,
           refreshToken,
-          wifiSsid: ssid,
-          wifiPassword: password,
         }),
 
       logout: async () => {
@@ -47,6 +52,7 @@ export const useAuthStore = create<AuthState>()(
         } catch (error) {
           console.warn('Error al cerrar sesión en el servidor:', error);
         } finally {
+          // 👇 5. Logout se queda igual (borra todo, lo cual es correcto)
           set({
             isAuthenticated: false,
             token: null,
@@ -56,10 +62,17 @@ export const useAuthStore = create<AuthState>()(
           });
         }
       },
+      
+      // 👇 4. Se implementa la nueva función
+      setWifiCredentials: (ssid, password) =>
+        set({
+          wifiSsid: ssid,
+          wifiPassword: password,
+        }),
+
     }),
     {
       name: 'auth-storage',
-      // ✅ Usa AsyncStorage como almacenamiento persistente
       storage: createJSONStorage(() => AsyncStorage),
     }
   )

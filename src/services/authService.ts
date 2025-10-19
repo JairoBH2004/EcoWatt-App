@@ -72,6 +72,19 @@ export interface Device {
   dev_model: string;
 }
 
+// --- 👇 NUEVAS INTERFACES PARA LA GRÁFICA ---
+export interface HistoryDataPoint {
+  timestamp: string;
+  value: number;
+}
+
+export interface HistoryGraphResponse {
+  period: string;
+  unit: string;
+  data_points: HistoryDataPoint[];
+}
+// --- 👆 FIN DE NUEVAS INTERFACES ---
+
 // Interfaz para los datos necesarios al registrar un dispositivo.
 interface DeviceRegistrationData {
   name: string;
@@ -173,6 +186,30 @@ export const getDashboardSummary = async (token: string): Promise<DashboardSumma
     throw new Error('Error desconocido al obtener los datos del dashboard.');
   }
 };
+
+// --- 👇 NUEVA FUNCIÓN PARA LA GRÁFICA ---
+export const getHistoryGraph = async (
+  token: string, 
+  period: 'daily' | 'weekly' | 'monthly'
+): Promise<HistoryGraphResponse> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/history/graph?period=${period}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      await handleApiError(response);
+    }
+    return await response.json();
+  } catch (error) {
+    if (error instanceof Error) throw error;
+    throw new Error('Error desconocido al obtener la gráfica.');
+  }
+};
+// --- 👆 FIN DE NUEVA FUNCIÓN ---
 
 
 // --- FUNCIONES DE DISPOSITIVOS ---
