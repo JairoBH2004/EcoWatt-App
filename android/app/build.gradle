@@ -57,18 +57,10 @@ react {
 /**
  * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
  */
-def enableProguardInReleaseBuilds = false
+def enableProguardInReleaseBuilds = false // Puedes cambiarlo a true si quieres ofuscar el código
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
- *
- * For example, to use the international variant, you can use:
- * `def jscFlavor = io.github.react-native-community:jsc-android-intl:2026004.+`
- *
- * The international variant includes ICU i18n library and necessary data
- * allowing to use e.g. `Date.toLocaleString` and `String.localeCompare` that
- * give correct results when using with locales other than en-US. Note that
- * this variant is about 6MiB larger per architecture than default.
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
@@ -86,6 +78,7 @@ android {
         versionName "1.0"
         
     }
+    // --- 👇 BLOQUE DE FIRMA ACTUALIZADO 👇 ---
     signingConfigs {
         debug {
             storeFile file('debug.keystore')
@@ -93,7 +86,18 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        // --- Añade la configuración de release ---
+        release {
+            if (project.hasProperty('MYAPP_RELEASE_STORE_FILE')) { // Verifica si las variables existen
+                storeFile file(MYAPP_RELEASE_STORE_FILE)      // Usa la variable del archivo
+                storePassword MYAPP_RELEASE_STORE_PASSWORD     // Usa la variable de contraseña del almacén
+                keyAlias MYAPP_RELEASE_KEY_ALIAS          // Usa la variable del alias
+                keyPassword MYAPP_RELEASE_KEY_PASSWORD       // Usa la variable de contraseña de la clave
+            }
+        }
     }
+    // --- 👆 FIN DEL BLOQUE DE FIRMA 👆 ---
+
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
@@ -101,11 +105,38 @@ android {
         release {
             // Caution! In production, you need to generate your own keystore file.
             // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+
+            // --- 👇 LÍNEA MODIFICADA AQUÍ 👇 ---
+            // Le dice que use la configuración 'release' que definimos arriba
+            signingConfig signingConfigs.release
+            // --- 👆 FIN DE LÍNEA MODIFICADA 👆 ---
+
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
     }
+
+    // --- 👇👇 AQUÍ VA EL CÓDIGO NUEVO 👇👇 ---
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            
+            // Aquí defines el nombre base de tu app
+            def baseName = "EcoWatt" 
+            
+            // Toma la versión del defaultConfig (ej: 1.0)
+            def versionName = defaultConfig.versionName
+            
+            // Toma el tipo (ej: release, debug)
+            def variantName = variant.name 
+            
+            // Revisa si estás haciendo un APK o un AAB (para la Play Store)
+            def extension = output.outputFile.name.endsWith('.aab') ? '.aab' : '.apk'
+            
+            // Crea el nombre final
+            outputFileName = "${baseName}-v${versionName}-${variantName}${extension}"
+        }
+    }
+    // --- 👆👆 HASTA AQUÍ VA EL CÓDIGO NUEVO 👆👆 ---
 }
 
 dependencies {

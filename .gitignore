@@ -28,6 +28,8 @@ build/
 .idea
 .gradle
 local.properties
+# Ignorar archivo de propiedades de Gradle (contiene contraseñas de firma)
+/android/gradle.properties # <--- LÍNEA AÑADIDA AQUÍ
 *.iml
 *.hprof
 .cxx/

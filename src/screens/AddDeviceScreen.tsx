@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, ActivityIndicator, TouchableOpacity, SafeAreaView,
   PermissionsAndroid, Platform, FlatList,
-  // --- 1. IMPORTA LO NECESARIO PARA EL MODAL ---
   Modal, TextInput, Alert
 } from 'react-native';
 import { BleManager, Device as BleDevice } from 'react-native-ble-plx';
@@ -11,7 +10,6 @@ import Zeroconf from 'react-native-zeroconf';
 import { Buffer } from 'buffer';
 
 import styles from '../styles/AddDeviceStyles';
-// --- 2. OBTÉN LA FUNCIÓN PARA GUARDAR ---
 import { useAuthStore } from '../store/useAuthStore';
 import { registerDevice, getDevices } from '../services/authService';
 
@@ -28,19 +26,19 @@ type Step =
   | 'deviceList'
   | 'configuring'
   | 'success'
-  | 'error';
+  | 'error'
+  | 'idle'; // Estado neutro para esperar el modal
 
 const AddDeviceScreen = ({ navigation }: AddDeviceScreenProps) => {
-  // --- 3. OBTÉN LOS DATOS Y LA FUNCIÓN DEL STORE ---
   const { token, wifiSsid, wifiPassword, setWifiCredentials } = useAuthStore();
   
-  const [currentStep, setCurrentStep] = useState<Step>('loadingPrerequisites');
+  // Inicia en 'idle' para no mostrar "Verificando..." inmediatamente
+  const [currentStep, setCurrentStep] = useState<Step>('idle'); 
   const [loadingMessage, setLoadingMessage] = useState('Verificando tus dispositivos...');
   const [error, setError] = useState('');
   const [foundDevices, setFoundDevices] = useState<BleDevice[]>([]);
   const [registeredMacs, setRegisteredMacs] = useState<Set<string>>(new Set());
 
-  // --- 4. AÑADE ESTADOS PARA EL MODAL Y EL FORMULARIO ---
   const [isWifiModalVisible, setIsWifiModalVisible] = useState(false);
   const [tempSsid, setTempSsid] = useState('');
   const [tempPass, setTempPass] = useState('');
@@ -48,7 +46,6 @@ const AddDeviceScreen = ({ navigation }: AddDeviceScreenProps) => {
   const networkTimeoutRef = useRef<number | null>(null);
   const networkDeviceRegisteredRef = useRef(false);
 
-  // --- 5. MODIFICA EL useEffect PRINCIPAL ---
   useEffect(() => {
     const initializeSetup = async () => {
       if (!token) {
@@ -57,17 +54,19 @@ const AddDeviceScreen = ({ navigation }: AddDeviceScreenProps) => {
         return;
       }
 
-      // --- 💡 ESTA ES LA LÓGICA CLAVE ---
+      // Si no hay WiFi, muestra el modal y detente.
+      // currentStep se queda en 'idle', por lo que no se muestra la carga.
       if (!wifiSsid || !wifiPassword) {
         setIsWifiModalVisible(true);
         return;
       }
       
+      // Si hay WiFi, procede con la carga y escaneo.
       await loadAndScan();
     };
 
     const loadAndScan = async () => {
-      setCurrentStep('loadingPrerequisites');
+      setCurrentStep('loadingPrerequisites'); // Ahora sí ponemos la carga
       setLoadingMessage('Verificando tus dispositivos...');
       
       try {
@@ -80,31 +79,39 @@ const AddDeviceScreen = ({ navigation }: AddDeviceScreenProps) => {
           setCurrentStep('error');
           return;
         }
+        // Si es 404 (sin dispositivos), está bien y continuamos
+        setRegisteredMacs(new Set());
       }
       
       await startBleScan();
     };
 
+    // Inicia el setup. El useEffect se re-ejecutará si wifiSsid o wifiPassword cambian.
     initializeSetup();
 
+    // Función de limpieza
     return () => {
       bleManager.stopDeviceScan();
       zeroconf.stop();
       if (networkTimeoutRef.current) clearTimeout(networkTimeoutRef.current);
     };
-  }, [token, wifiSsid, wifiPassword]); // El useEffect se re-ejecutará si cambian las credenciales
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, wifiSsid, wifiPassword]); // Depende de estos valores
 
-  // --- 6. FUNCIÓN PARA GUARDAR DESDE EL MODAL ---
+  // --- Función para guardar WiFi desde el modal ---
   const handleSaveWifi = () => {
     if (!tempSsid || !tempPass) {
       Alert.alert('Error', 'Ambos campos son obligatorios.');
       return;
     }
-    
     setWifiCredentials(tempSsid, tempPass); 
     setIsWifiModalVisible(false);
+    // Al cerrar, el useEffect se re-ejecuta, esta vez con credenciales,
+    // y llamará a loadAndScan()
   };
 
+  // --- (requestBluetoothPermission, startBleScan, handleDeviceSelection, connectShellyAndConfigure, findShellyOnNetwork ... ) ---
+  // (Estas funciones van aquí sin cambios)
   const requestBluetoothPermission = async (): Promise<boolean> => {
     if (Platform.OS === 'ios') return true;
     if (Platform.OS === 'android') {
@@ -233,8 +240,10 @@ const AddDeviceScreen = ({ navigation }: AddDeviceScreenProps) => {
         }
     }, 60000) as unknown) as number;
   };
+  // --- FIN de funciones sin cambios ---
 
-  // --- 7. FUNCIÓN PARA RENDERIZAR EL MODAL ---
+
+  // --- Función para renderizar el Modal ---
   const renderWifiModal = () => (
     <Modal
       visible={isWifiModalVisible}
@@ -276,7 +285,14 @@ const AddDeviceScreen = ({ navigation }: AddDeviceScreenProps) => {
     </Modal>
   );
 
+  // --- Función para renderizar el contenido principal ---
   const renderContent = () => {
+    // Si el modal está visible, no renderices NADA más.
+    // El fondo de la pantalla (de styles.container) se verá, y el modal encima.
+    if (isWifiModalVisible) {
+        return null;
+    }
+
     switch (currentStep) {
       case 'loadingPrerequisites':
       case 'scanning':
@@ -335,17 +351,21 @@ const AddDeviceScreen = ({ navigation }: AddDeviceScreenProps) => {
             </TouchableOpacity>
           </View>
         );
-
+      
+      // El estado 'idle' (mientras espera el modal) no muestra nada
+      case 'idle':
       default:
         return null;
     }
   };
 
   return (
+    // SafeAreaView envuelve todo
     <SafeAreaView style={styles.container}>
+      {/* El contenido (carga, lista, error) se renderiza aquí */}
       {renderContent()}
       
-      {/* --- 8. RENDERIZA EL MODAL ENCIMA DE TODO --- */}
+      {/* El modal se renderiza al mismo nivel, por encima del contenido */}
       {renderWifiModal()} 
     </SafeAreaView>
   );

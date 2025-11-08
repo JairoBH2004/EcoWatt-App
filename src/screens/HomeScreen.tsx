@@ -9,22 +9,25 @@ import Icon from 'react-native-vector-icons/FontAwesome5';
 import { BarChart } from 'react-native-chart-kit';
 
 import { styles } from '../styles/HomeStyles';
-import { useAuthStore } from '../store/useAuthStore';
+import { useAuthStore } from '../store/useAuthStore'; // <-- 1. IMPORTAR (ya lo tenías)
 import {
     getDashboardSummary, DashboardSummary,
     getUserProfile, UserProfile,
     getDevices, Device,
-    getHistoryGraph
+    getLast7DaysHistory // Usamos la función correcta
 } from '../services/authService';
+// Importamos los tipos correctos
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import { RootTabParamList } from '../navigation/AppNavigator';
+import { CompositeScreenProps } from '@react-navigation/native';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { RootStackParamList, RootTabParamList } from '../navigation/AppNavigator';
 
 // Constants
 const ECOWATT_BACKGROUND = require('../assets/fondo.jpg');
 const PRIMARY_GREEN = '#00FF7F';
 const screenWidth = Dimensions.get("window").width;
 
-// Helper array for day names (corrects bug)
+// Helper array for day names
 const days = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
 
 // Type definition for graph data
@@ -33,18 +36,22 @@ type GraphData = {
     datasets: { data: number[] }[];
 };
 
-// Default graph data (empty state for 7 days)
+// Default graph data
 const defaultGraphData: GraphData = {
-    labels: days.slice(-7), // Still keep 7 labels for default empty state layout
+    labels: days.slice(-7),
     datasets: [{ data: Array(7).fill(0) }]
 };
 
-// Screen props type
-type HomeScreenProps = BottomTabScreenProps<RootTabParamList, 'Home'>;
+// Type for screen props using CompositeScreenProps
+type HomeScreenProps = CompositeScreenProps<
+  BottomTabScreenProps<RootTabParamList, 'Home'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
 
 const HomeScreen = ({ navigation }: HomeScreenProps) => {
-    // Hooks
-    const { token, logout } = useAuthStore();
+    // State Hooks
+    // --- 👇 CAMBIO 1: Obtener 'setHasDevices' del store 👇 ---
+    const { token, logout, setHasDevices } = useAuthStore();
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [summary, setSummary] = useState<DashboardSummary | null>(null);
     const [devices, setDevices] = useState<Device[]>([]);
@@ -52,78 +59,92 @@ const HomeScreen = ({ navigation }: HomeScreenProps) => {
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
 
+    // Effect Hook to load initial data
     useEffect(() => {
         const loadInitialData = async () => {
+            // Check for token, logout if none
             if (!token) {
                 logout();
                 return;
             }
 
-            // Start loading state
+            // Set initial loading state
             setIsLoading(true);
             setError('');
-            setGraphData(null); // Reset graph data
+            setGraphData(null); // Reset graph data on load
 
             try {
-                // Fetch profile first
+                // Fetch profile first (essential)
                 const profileData = await getUserProfile(token);
                 setProfile(profileData);
 
-                // Fetch devices
+                // Fetch devices, handle 404 (no devices) gracefully
                 let devicesData: Device[] = [];
                 try {
                     devicesData = await getDevices(token);
                     setDevices(devicesData);
                 } catch (err: any) {
                     if (err.message.includes('404')) {
-                        setDevices([]);
+                        setDevices([]); // Set empty array if 404
                     } else {
-                        throw err;
+                        throw err; // Re-throw other device errors
                     }
                 }
 
-                // If devices exist, fetch summary and graph data in parallel
+                // If user has devices, fetch summary and history in parallel
                 if (devicesData.length > 0) {
+                    // --- 👇 CAMBIO 2: Informar al store que SÍ hay dispositivos 👇 ---
+                    setHasDevices(true);
+
                     const [summaryData, historyData] = await Promise.all([
                         getDashboardSummary(token),
-                        getHistoryGraph(token, 'daily')
+                        getLast7DaysHistory(token) // Use the correct function
                     ]);
-
                     setSummary(summaryData);
 
-                    // Process graph data if available
-                    if (historyData.data_points.length > 0) {
+                    // --- 👇 LOG PARA VER LOS DATOS CRUDOS DE LA API 👇 ---
+                    console.log('API Response (History):', JSON.stringify(historyData, null, 2));
+                    // --- 👆 FIN DEL LOG 👆 ---
+
+
+                    // Process history data only if it exists and has data_points array
+                    if (historyData && historyData.data_points && historyData.data_points.length > 0) {
                         setGraphData({
-                            labels: historyData.data_points
-                                .map((p: any) => days[new Date(p.timestamp).getDay()]), // Sin .slice()
-                            datasets: [{
-                                data: historyData.data_points.map((p: any) => p.value) // Sin .slice()
-                            }]
+                            labels: historyData.data_points.map((p: any) => days[new Date(p.timestamp).getDay()]),
+                            datasets: [{ data: historyData.data_points.map((p: any) => p.value) }]
                         });
                     } else {
-                        setGraphData(defaultGraphData); // Show default empty graph
+                        setGraphData(defaultGraphData); // Use default empty graph if no history
                     }
                 } else {
-                    // No devices found, set defaults
+                    // No devices, set summary to null and graph to default
+                    // --- 👇 CAMBIO 3: Informar al store que NO hay dispositivos 👇 ---
+                    setHasDevices(false);
+                    
                     setSummary(null);
-                    setGraphData(defaultGraphData); // Show default empty graph
+                    setGraphData(defaultGraphData);
                 }
 
             } catch (err: any) {
+                // Handle general errors (profile fetch, unexpected API errors)
                 console.log("Error loading home screen data:", err);
                 setError(err.message || "No se pudieron cargar los datos.");
-                if (err.message.includes('401')) logout();
+                // Logout if token is invalid (401)
+                if (err.message.includes('401')) {
+                    logout();
+                }
             } finally {
-                setIsLoading(false); // End loading state
+                // Always finish loading state
+                setIsLoading(false);
             }
         };
 
         loadInitialData();
-    }, [token, logout]); // Depend on token and logout
+        // --- 👇 CAMBIO 4: Añadir 'setHasDevices' a las dependencias 👇 ---
+    }, [token, logout, setHasDevices]); // Re-run effect if token or logout function changes
 
     // Loading State UI
     if (isLoading) {
-        // ... (Tu vista de carga)
         return (
             <View style={styles.centered}>
                 <ActivityIndicator size="large" color={PRIMARY_GREEN} />
@@ -134,10 +155,10 @@ const HomeScreen = ({ navigation }: HomeScreenProps) => {
 
     // Error State UI
     if (error) {
-       // ... (Tu vista de error)
        return (
             <View style={styles.centered}>
                 <Text style={styles.errorText}>{error}</Text>
+                {/* Button to navigate to AddDevice might be useful here too */}
                 <TouchableOpacity
                     style={[styles.addButton, { marginVertical: 10 }]}
                     onPress={() => navigation.navigate('AddDevice')}
@@ -155,7 +176,6 @@ const HomeScreen = ({ navigation }: HomeScreenProps) => {
     const renderContent = () => {
         // "No Devices" View
         if (devices.length === 0) {
-             // ... (Tu vista "sin dispositivos")
              return (
                  <View style={styles.centeredContent}>
                      <Icon name="plus-circle" size={50} color={PRIMARY_GREEN} />
@@ -181,16 +201,13 @@ const HomeScreen = ({ navigation }: HomeScreenProps) => {
             <>
                 {/* Header */}
                 <View style={styles.header}>
-                     {/* ... (Tu Header) */}
-                     <View>
+                    <View>
                         <Text style={styles.headerTitle}>¡Hola, {profile?.user_name?.split(' ')[0]}!</Text>
                         <Text style={styles.headerSubtitle}>Tu resumen de energía</Text>
                     </View>
                     <View style={styles.headerIconsContainer}>
-                        <TouchableOpacity style={styles.menuButton} onPress={() => navigation.navigate('AddDevice')}>
-                            <Icon name="plus" size={24} color="#FFFFFF" />
-                        </TouchableOpacity>
-                        <TouchableOpacity style={[styles.menuButton, { marginLeft: 16 }]} onPress={() => Alert.alert('Notificaciones', 'No tienes notificaciones nuevas.')}>
+                        {/* Notification Bell Icon */}
+                        <TouchableOpacity style={styles.menuButton} onPress={() => Alert.alert('Notificaciones', 'No tienes notificaciones nuevas.')}>
                             <Icon name="bell" size={24} color="#FFFFFF" solid />
                         </TouchableOpacity>
                     </View>
@@ -198,7 +215,6 @@ const HomeScreen = ({ navigation }: HomeScreenProps) => {
 
                 {/* Main Summary Card */}
                 <View style={styles.mainCard}>
-                     {/* ... (Tu Main Card) */}
                     <Text style={styles.mainCardTitle}>Costo Estimado del Periodo</Text>
                     <Text style={styles.projectedCost}>${summary?.estimated_cost_mxn?.toFixed(2) || '0.00'} MXN</Text>
                     <Text style={styles.comparisonText}>Días en el ciclo: {summary?.days_in_cycle || 0}</Text>
@@ -206,10 +222,9 @@ const HomeScreen = ({ navigation }: HomeScreenProps) => {
 
                 {/* Small Info Cards */}
                 <View style={styles.smallCardsContainer}>
-                     {/* ... (Tus Small Cards) */}
-                     <View style={styles.smallCard}>
+                    <View style={styles.smallCard}>
                         <Icon name="bolt" size={24} color={PRIMARY_GREEN} />
-                        <Text style={styles.smallCardValue}>{summary?.kwh_consumed_cycle || 0} kWh</Text>
+                        <Text style={styles.smallCardValue}>{summary?.kwh_consumed_cycle?.toFixed(2) || 0} kWh</Text>
                         <Text style={styles.smallCardLabel}>Consumo del Ciclo</Text>
                     </View>
                     <View style={styles.smallCard}>
@@ -222,31 +237,32 @@ const HomeScreen = ({ navigation }: HomeScreenProps) => {
                 {/* Recommendation Card */}
                 <View style={styles.recommendationCard}>
                     <Icon name="lightbulb" size={24} color="#003366" />
-                    <Text style={styles.recommendationText}>{summary?.latest_recommendation || 'No hay recomendaciones.'}</Text>
+                    <Text style={styles.recommendationText}>{summary?.latest_recommendation || 'Aún no hay recomendaciones.'}</Text>
                 </View>
 
                 {/* Graph Card with Horizontal Scroll */}
                 <View style={styles.graphContainer}>
-                    {/* El título ahora es dinámico */}
+                    {/* Dynamic title based on actual data length */}
                     <Text style={styles.graphTitle}>Consumo Últimos {graphData?.labels.length || 0} Días</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                        {/* Show loading indicator if graphData is null */}
                         {!graphData ? (
                             <View style={[styles.graphPlaceholder, { width: screenWidth - 70, height: 220 }]}>
                                 <ActivityIndicator color={PRIMARY_GREEN} />
                             </View>
                         ) : (
-                            // El ancho ahora depende de la cantidad REAL de labels
+                            // Calculate width dynamically based on label count or min screen width
                             <View style={{ width: Math.max(graphData.labels.length * 60, screenWidth - 70) }}>
                                 <BarChart
-                                    data={graphData}
+                                    data={graphData} // Data is guaranteed non-null here
                                     width={Math.max(graphData.labels.length * 60, screenWidth - 70)}
                                     height={220}
-                                    fromZero
+                                    fromZero // Start Y axis at 0
                                     yAxisSuffix=" kWh"
-                                    yAxisLabel=""
+                                    yAxisLabel="" // No need for Y axis label
                                     chartConfig={chartConfig}
-                                    verticalLabelRotation={0}
-                                    showValuesOnTopOfBars={true}
+                                    verticalLabelRotation={0} // Keep labels horizontal
+                                    showValuesOnTopOfBars={true} // Show value above bar
                                     style={{ borderRadius: 16 }}
                                 />
                             </View>
@@ -257,12 +273,14 @@ const HomeScreen = ({ navigation }: HomeScreenProps) => {
         );
     };
 
-    // Main component return
+    // Main component return statement
     return (
         <ImageBackground source={ECOWATT_BACKGROUND} style={styles.container} resizeMode="cover">
             <StatusBar barStyle="light-content" backgroundColor="transparent" translucent={true} />
             <SafeAreaView style={{ flex: 1 }}>
+                {/* Use ScrollView only for the content area */}
                 <ScrollView contentContainerStyle={styles.contentContainer}>
+                    {/* Render content based on loading/error state */}
                     {renderContent()}
                 </ScrollView>
             </SafeAreaView>
@@ -270,28 +288,30 @@ const HomeScreen = ({ navigation }: HomeScreenProps) => {
     );
 };
 
-// Chart Configuration
+// Chart Configuration (using theme colors)
 const chartConfig = {
-    backgroundColor: '#1E2A47',
-    backgroundGradientFrom: '#1E2A47',
+    backgroundColor: '#1E2A47', // Use a color from your theme if available
+    backgroundGradientFrom: '#1E2A47', // Match background
     backgroundGradientTo: '#1E2A47',
-    decimalPlaces: 3, // Shows values like 0.028
-    color: (opacity = 1) => `rgba(0, 255, 127, ${opacity})`, // Primary green color
+    decimalPlaces: 3, // Adjust decimals as needed for kWh values
+    color: (opacity = 1) => `rgba(0, 255, 127, ${opacity})`, // Primary green
     labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`, // White labels
     style: {
         borderRadius: 16
     },
-    propsForDots: {
+    propsForDots: { // Not used by BarChart
         r: "6",
         strokeWidth: "2",
         stroke: PRIMARY_GREEN
     },
     propsForBackgroundLines: {
-        stroke: 'rgba(255, 255, 255, 0.2)' // Faint background lines
+        stroke: 'rgba(255, 255, 255, 0.2)' // Faint white lines
     },
     propsForLabels: {
-        fontSize: 10 // Smaller font for labels
-    }
+        fontSize: 10 // Smaller font size for labels
+    },
+    // --- 👇 AÑADIDO PARA AJUSTAR EJE Y 👇 ---
+    segments: 4 // Sugerimos 4 líneas horizontales
 };
 
 export default HomeScreen;

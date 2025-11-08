@@ -15,6 +15,7 @@ interface AuthState {
   refreshToken: string | null;
   wifiSsid: string | null;
   wifiPassword: string | null;
+  hasDevices: boolean; // <--- AÑADIDO
 
   // 👇 1. Se actualiza la firma de login (sin WiFi)
   login: (accessToken: string, refreshToken: string) => void;
@@ -23,6 +24,7 @@ interface AuthState {
   
   // 👇 2. Se añade la nueva función para el WiFi
   setWifiCredentials: (ssid: string, password: string) => void; 
+  setHasDevices: (status: boolean) => void; // <--- AÑADIDO
 }
 
 // --- Creación del Store ---
@@ -34,6 +36,7 @@ export const useAuthStore = create<AuthState>()(
       refreshToken: null,
       wifiSsid: null,
       wifiPassword: null,
+      hasDevices: false, // <--- AÑADIDO (Estado inicial)
 
       // 👇 3. Login ya NO maneja el WiFi
       login: (accessToken, refreshToken) =>
@@ -59,6 +62,7 @@ export const useAuthStore = create<AuthState>()(
             refreshToken: null,
             wifiSsid: null,
             wifiPassword: null,
+            hasDevices: false, // <--- AÑADIDO (Reset en logout)
           });
         }
       },
@@ -68,6 +72,12 @@ export const useAuthStore = create<AuthState>()(
         set({
           wifiSsid: ssid,
           wifiPassword: password,
+        }),
+
+      // --- 👇 AÑADIDO (Nueva acción) ---
+      setHasDevices: (status) =>
+        set({
+          hasDevices: status,
         }),
 
     }),

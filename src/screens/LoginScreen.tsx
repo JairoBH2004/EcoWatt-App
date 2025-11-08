@@ -1,33 +1,35 @@
 import React, { useState } from 'react';
-import { 
-    View, 
-    Text, 
-    TextInput, 
-    TouchableOpacity, 
-    Image, 
-    ActivityIndicator, 
-    KeyboardAvoidingView, 
-    Platform 
+import {
+    View,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    Image,
+    ActivityIndicator,
+    KeyboardAvoidingView,
+    Platform
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import Icon from 'react-native-vector-icons/FontAwesome'; 
-import LinearGradient from 'react-native-linear-gradient'; 
+import Icon from 'react-native-vector-icons/FontAwesome';
+import LinearGradient from 'react-native-linear-gradient';
 
 // --- 1. IMPORTAMOS EL SERVICIO Y EL STORE ---
-import { loginUser } from '../services/authService'; // <-- ¡CAMBIO CLAVE!
-import { useAuthStore } from '../store/useAuthStore';
-import styles, { 
-    COLOR_PRIMARY_BLUE, 
+import { loginUser } from '../services/authService';
+import { useAuthStore } from '../store/useAuthStore'; // Asegúrate que este useAuthStore esté actualizado sin WiFi en login
+import styles, {
+    COLOR_PRIMARY_BLUE,
     COLOR_PRIMARY_GREEN,
-} from '../styles/loginStyles'; 
+} from '../styles/loginStyles';
 
 const logo = require('../assets/logo.png');
 
 // --- Definición de Tipos ---
+// --- 👇 Asegúrate que este tipo coincida con tu Stack Navigator principal 👇 ---
 type StackParamList = {
-    Login: undefined; 
-    Home: undefined;
+    Login: undefined;
+    Home: undefined; // O MainApp, dependiendo de tu navigator
     Register: undefined;
+    ForgotPassword: undefined; // <-- AÑADIDO
 };
 
 type LoginScreenProps = NativeStackScreenProps<StackParamList, 'Login'>;
@@ -41,7 +43,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
-    // --- 2. ACTUALIZAMOS LA LÓGICA DE LOGIN ---
+    // --- Lógica de Login (asegúrate que 'login' en useAuthStore ya no pida ssid/pass) ---
     const handleLogin = async () => {
         if (!email || !password) {
             setError('Por favor, completa ambos campos.');
@@ -50,17 +52,16 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
         setIsLoading(true);
         setError('');
         try {
-            // ¡Llamamos a nuestra función del servicio!
-             const data = await loginUser({ 
-                user_email: email, 
-                user_password: password 
+            const data = await loginUser({
+                user_email: email,
+                user_password: password
             });
-            
-            login(data.access_token, data.refresh_token,"","");
+
+            // Llama a login solo con token y refresh token
+            login(data.access_token, data.refresh_token);
 
         } catch (err: any) {
-              console.log('Error en login:', err);
-
+            console.log('Error en login:', err);
             setError(err.message);
         } finally {
             setIsLoading(false);
@@ -68,18 +69,17 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
     };
 
     return (
-        // --- (El resto del componente (JSX) no necesita cambios) ---
         <LinearGradient
             colors={[COLOR_PRIMARY_BLUE, COLOR_PRIMARY_GREEN]}
-            style={styles.fullScreenBackground} 
+            style={styles.fullScreenBackground}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
         >
-            <KeyboardAvoidingView 
+            <KeyboardAvoidingView
                 style={{ flex: 1 }}
                 behavior={Platform.OS === "ios" ? "padding" : "height"}
             >
-                <View style={styles.brandPanel}> 
+                <View style={styles.brandPanel}>
                     <Image source={logo} style={styles.loginLogo} />
                     <Text style={styles.brandTitle}>ECOWATT</Text>
                     <Text style={styles.brandSlogan}>Mide. Entiende. Ahorra.</Text>
@@ -87,7 +87,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
 
                 <View style={styles.formPanel}>
                     <Text style={styles.formTitle}>Bienvenido de nuevo</Text>
-                    
+
                     {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
                     <View style={styles.inputContainer}>
@@ -103,7 +103,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
                         </TouchableOpacity>
                     </View>
 
-                    <TouchableOpacity style={styles.forgotPassword}>
+                    {/* --- 👇 MODIFICACIÓN AQUÍ 👇 --- */}
+                    <TouchableOpacity
+                        style={styles.forgotPassword}
+                        onPress={() => navigation.navigate('ForgotPassword')} // Navega a la pantalla
+                        disabled={isLoading} // Deshabilitado si está cargando
+                    >
                         <Text style={styles.forgotPasswordText}>¿Olvidaste tu contraseña?</Text>
                     </TouchableOpacity>
 
@@ -111,7 +116,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
                         {isLoading ? ( <ActivityIndicator size="small" color="#FFFFFF" /> ) : ( <Text style={styles.loginButtonText}>INGRESAR</Text> )}
                     </TouchableOpacity>
 
-                    <TouchableOpacity style={styles.registerButton} onPress={() => navigation.navigate('Register' as never)}>
+                    <TouchableOpacity style={styles.registerButton} onPress={() => navigation.navigate('Register')} disabled={isLoading}>
                         <Text style={styles.registerButtonText}>REGISTRARSE</Text>
                     </TouchableOpacity>
                 </View>
