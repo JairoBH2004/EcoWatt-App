@@ -10,7 +10,8 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { updateUserProfile, UserProfile } from '../services/authService';
 import { useAuthStore } from '../store/useAuthStore';
 import styles from '../styles/EditProfileStyles'; // Importa los estilos que acabamos de crear
-import { RootStackParamList } from '../navigation/AppNavigator'; // Asegúrate que RootStackParamList esté exportado
+// Asumimos que RootStackParamList está en esta ruta
+import { RootStackParamList } from '../navigation/AppNavigator'; 
 
 // Define el tipo para los parámetros que recibirá esta pantalla
 type EditProfileRouteParams = {
@@ -46,11 +47,13 @@ const EditProfileScreen: React.FC<EditProfileScreenProps> = ({ route, navigation
             setError('Todos los campos son obligatorios.');
             return;
         }
+        // --- ¡VALIDACIÓN DE DÍA DE CORTE! ---
         const dayNumber = parseInt(billingDay, 10);
         if (isNaN(dayNumber) || dayNumber < 1 || dayNumber > 31) {
             setError('El día de corte debe ser un número entre 1 y 31.');
             return;
         }
+        // --- FIN DE VALIDACIÓN ---
 
         setIsLoading(true);
 

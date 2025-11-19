@@ -10,13 +10,17 @@ buildscript {
     repositories {
         google()
         mavenCentral()
-        maven { url 'https://www.jitpack.io' } // opcional
+        maven { url 'https.www.jitpack.io' } // opcional
     }
     dependencies {
         classpath("com.android.tools.build:gradle:8.6.1") // 🔹 Más rápido y reciente
         classpath("com.facebook.react:react-native-gradle-plugin:0.75.1")
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.20")
-        // ❌ No pongas expo.modules aquí
+        
+        // --- 👇 LÍNEA AÑADIDA ---
+        // 1. Añade el plugin de Google Services (basado en la captura)
+        classpath("com.google.gms:google-services:4.4.4")
+        // --- 👆 FIN DE LÍNEA AÑADIDA ---
     }
 }
 

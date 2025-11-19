@@ -37,24 +37,32 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
             return;
         }
 
+        // --- ¡INICIA CORRECCIÓN 1: VALIDACIÓN DE DÍA DE CORTE! ---
+        const dayNumber = parseInt(cutDay, 10);
+        if (isNaN(dayNumber) || dayNumber < 1 || dayNumber > 31) {
+            setError('El día de corte debe ser un número entre 1 y 31.');
+            return; // Detenemos si el día es inválido
+        }
+        // --- FIN DE VALIDACIÓN ---
+
         setIsLoading(true);
         setError('');
 
         try {
            // --- ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
-            // Usamos los nombres de campo que la API espera.
-            await registerUser({
+           // Usamos los nombres de campo que la API espera.
+           await registerUser({
                 user_name: name,
                 user_email: email,
                 user_password: password,
                 user_trf_rate: '1f',
-                user_billing_day: parseInt(cutDay, 10),
-            });
-            Alert.alert(
+                user_billing_day: dayNumber, // <-- Usamos el número validado
+           });
+           Alert.alert(
                 '¡Registro Exitoso!',
                 'Tu cuenta ha sido creada. Ahora puedes iniciar sesión.',
                 [{ text: 'OK', onPress: () => navigation.navigate('Login' as never) }]
-            );
+           );
 
         } catch (err: any) {
             setError(err.message);
@@ -98,7 +106,26 @@ const RegisterScreen: React.FC<RegisterScreenProps> = ({ navigation }) => {
                     </View>
                     <View style={registerStyles.inputContainer}>
                         <Icon name="lock" size={20} color="#888" style={registerStyles.inputIcon} />
-                        <TextInput style={registerStyles.input} placeholder="Contraseña" placeholderTextColor="#888" secureTextEntry={!isPasswordVisible} onChangeText={setPassword} value={password}/>
+                        
+                        {/* --- INICIA CORRECCIÓN 2: ASTERISCOS --- */}
+                        {/* Aplicamos la misma solución que en LoginScreen para los asteriscos */}
+                        <TextInput
+                          style={[
+                            registerStyles.input, // Usamos el estilo base de registro
+                            {
+                              color: '#000',           // 1. Forzamos el color a negro
+                              fontFamily: undefined    // 2. Forzamos la fuente por defecto
+                            },
+                          ]}
+                          textAlignVertical="center" // 3. Prop específica de Android
+                          placeholder="Contraseña"
+                          placeholderTextColor="#888"
+                          secureTextEntry={!isPasswordVisible}
+                          onChangeText={setPassword}
+                          value={password}
+                        />
+                        {/* --- TERMINA CORRECCIÓN 2 --- */}
+
                         <TouchableOpacity onPress={() => setIsPasswordVisible(!isPasswordVisible)}>
                             <Icon name={isPasswordVisible ? 'eye-slash' : 'eye'} size={20} color={COLOR_PRIMARY_GREEN} style={registerStyles.eyeIcon} />
                         </TouchableOpacity>

@@ -1,12 +1,9 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// --- Simulación de cierre de sesión remoto ---
-const logoutUser = async (refreshToken: string) => {
-  console.log('Llamando a la API para invalidar el token:', refreshToken);
-  return Promise.resolve();
-};
+// --- 👇 1. IMPORTAMOS EL NUEVO SERVICIO ---
+import { initializeNotificationService } from '../services/notificationService'; 
+import { logoutUser } from '../services/authService'; // <--- CORREGIDO (Simulación movida a authService)
 
 // --- Interfaz de AuthState ---
 interface AuthState {
@@ -17,12 +14,8 @@ interface AuthState {
   wifiPassword: string | null;
   hasDevices: boolean; // <--- AÑADIDO
 
-  // 👇 1. Se actualiza la firma de login (sin WiFi)
   login: (accessToken: string, refreshToken: string) => void;
-  
   logout: () => Promise<void>;
-  
-  // 👇 2. Se añade la nueva función para el WiFi
   setWifiCredentials: (ssid: string, password: string) => void; 
   setHasDevices: (status: boolean) => void; // <--- AÑADIDO
 }
@@ -38,13 +31,18 @@ export const useAuthStore = create<AuthState>()(
       wifiPassword: null,
       hasDevices: false, // <--- AÑADIDO (Estado inicial)
 
-      // 👇 3. Login ya NO maneja el WiFi
-      login: (accessToken, refreshToken) =>
+      login: (accessToken, refreshToken) => {
         set({
           isAuthenticated: true,
           token: accessToken,
           refreshToken,
-        }),
+        });
+        
+        // --- 👇 2. "ENCENDEMOS" LAS NOTIFICACIONES ---
+        // Justo después de guardar el token, inicializamos el servicio.
+        // No usamos 'await' para no bloquear el login (se ejecuta en fondo).
+        initializeNotificationService();
+      },
 
       logout: async () => {
         const refreshToken = get().refreshToken;
@@ -55,7 +53,6 @@ export const useAuthStore = create<AuthState>()(
         } catch (error) {
           console.warn('Error al cerrar sesión en el servidor:', error);
         } finally {
-          // 👇 5. Logout se queda igual (borra todo, lo cual es correcto)
           set({
             isAuthenticated: false,
             token: null,
@@ -64,10 +61,11 @@ export const useAuthStore = create<AuthState>()(
             wifiPassword: null,
             hasDevices: false, // <--- AÑADIDO (Reset en logout)
           });
+          // Opcional: Aquí podríamos llamar a una función para
+          // des-registrar el token FCM del backend si quisiéramos.
         }
       },
       
-      // 👇 4. Se implementa la nueva función
       setWifiCredentials: (ssid, password) =>
         set({
           wifiSsid: ssid,
@@ -84,6 +82,15 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'auth-storage',
       storage: createJSONStorage(() => AsyncStorage),
+      // --- 👇 3. (OPCIONAL PERO RECOMENDADO) ---
+      // Esto llama a 'initializeNotificationService' tan pronto como
+      // la app carga y detecta que ya estabas logueado.
+      onRehydrateStorage: () => (state) => {
+        if (state?.isAuthenticated) {
+          console.log('Usuario ya autenticado, inicializando notificaciones...');
+          initializeNotificationService();
+        }
+      },
     }
   )
 );

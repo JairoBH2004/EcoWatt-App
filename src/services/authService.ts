@@ -94,6 +94,13 @@ interface ResetPasswordData {
 }
 // --- 👆 FIN DE NUEVA INTERFAZ 👆 ---
 
+// --- 👇 NUEVA INTERFAZ PARA EL TOKEN FCM (NOTIFICACIONES) 👇 ---
+interface FcmTokenData {
+    dev_fcm_token: string;
+}
+// --- 👆 FIN DE NUEVA INTERFAZ 👆 ---
+
+
 // --- FUNCIONES DE AUTENTICACIÓN Y USUARIO ---
 export const registerUser = async (userData: UserRegistrationData) => {
   try {
@@ -299,3 +306,34 @@ export const registerDevice = async (token: string, deviceData: DeviceRegistrati
     throw new Error('Error desconocido al registrar el dispositivo.');
   }
 };
+
+// --- 👇 FUNCIÓN AÑADIDA PARA NOTIFICACIONES ---
+/**
+ * Registra el token FCM (Firebase Cloud Messaging) de un dispositivo específico 
+ * en el backend para que pueda recibir notificaciones push.
+ */
+export const registerFcmToken = async (token: string, deviceId: number, fcmToken: string): Promise<void> => {
+    try {
+        const body: FcmTokenData = {
+            dev_fcm_token: fcmToken
+        };
+        
+        const response = await fetch(`${API_BASE_URL}/api/v1/devices/${deviceId}/register-fcm`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify(body),
+        });
+
+        if (!response.ok) {
+            await handleApiError(response);
+        }
+        // Un 200 OK sin cuerpo es éxito
+    } catch (error) { 
+        if (error instanceof Error) throw error;
+        throw new Error('Error desconocido al registrar el token FCM.');
+    }
+};
+// --- 👆 FIN DE FUNCIÓN AÑADIDA 👆 --- 

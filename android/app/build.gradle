@@ -2,6 +2,11 @@ apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
+// --- 👇 LÍNEA AÑADIDA ---
+// 1. Agrega el plugin de Google Services (para leer el google-services.json)
+apply plugin: 'com.google.gms.google-services'
+// --- 👆 FIN DE LÍNEA AÑADIDA ---
+
 /**
  * This is the configuration block to customize your React Native Android app.
  * By default you don't need to apply any configuration, just uncomment the lines you need.
@@ -142,6 +147,16 @@ android {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+
+    // --- 👇 LÍNEAS AÑADIDAS ---
+    // 2. Importa el "Bill of Materials" (BoM) de Firebase
+    // Esto asegura que todas tus librerías de Firebase usen versiones compatibles
+    implementation platform('com.google.firebase:firebase-bom:34.5.0')
+    
+    // 3. Añade las librerías de Firebase que necesitas
+    implementation 'com.google.firebase:firebase-analytics' // Recomendado por Firebase
+    implementation 'com.google.firebase:firebase-messaging' // ¡Esta es la de Notificaciones!
+    // --- 👆 FIN DE LÍNEAS AÑADIDAS ---
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

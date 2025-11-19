@@ -7,15 +7,15 @@ import {
     Image,
     ActivityIndicator,
     KeyboardAvoidingView,
-    Platform
+    Platform,
+    Alert
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import Icon from 'react-native-vector-icons/FontAwesome';
 import LinearGradient from 'react-native-linear-gradient';
 
-// --- 1. IMPORTAMOS EL SERVICIO Y EL STORE ---
 import { loginUser } from '../services/authService';
-import { useAuthStore } from '../store/useAuthStore'; // Asegúrate que este useAuthStore esté actualizado sin WiFi en login
+import { useAuthStore } from '../store/useAuthStore';
 import styles, {
     COLOR_PRIMARY_BLUE,
     COLOR_PRIMARY_GREEN,
@@ -23,19 +23,16 @@ import styles, {
 
 const logo = require('../assets/logo.png');
 
-// --- Definición de Tipos ---
-// --- 👇 Asegúrate que este tipo coincida con tu Stack Navigator principal 👇 ---
 type StackParamList = {
     Login: undefined;
-    Home: undefined; // O MainApp, dependiendo de tu navigator
+    Home: undefined; 
     Register: undefined;
-    ForgotPassword: undefined; // <-- AÑADIDO
+    ForgotPassword: undefined;
 };
 
 type LoginScreenProps = NativeStackScreenProps<StackParamList, 'Login'>;
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
-    // --- (Los estados del componente no cambian) ---
     const { login } = useAuthStore();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -43,7 +40,6 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
-    // --- Lógica de Login (asegúrate que 'login' en useAuthStore ya no pida ssid/pass) ---
     const handleLogin = async () => {
         if (!email || !password) {
             setError('Por favor, completa ambos campos.');
@@ -51,18 +47,23 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
         }
         setIsLoading(true);
         setError('');
+        
         try {
+            // 1. Petición al Backend
             const data = await loginUser({
                 user_email: email,
                 user_password: password
             });
 
-            // Llama a login solo con token y refresh token
+            // 2. Guardar en Store (y navegar)
             login(data.access_token, data.refresh_token);
+            
+            // Nota: No llamamos a notificaciones aquí. 
+            // El HomeScreen lo hará automáticamente al cargar.
 
         } catch (err: any) {
             console.log('Error en login:', err);
-            setError(err.message);
+            setError(err.message || 'Error al iniciar sesión');
         } finally {
             setIsLoading(false);
         }
@@ -92,22 +93,40 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
 
                     <View style={styles.inputContainer}>
                         <Icon name="user" size={20} color="#888" style={styles.inputIcon} />
-                        <TextInput style={styles.input} placeholder="Correo Electrónico" placeholderTextColor="#888" keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={setEmail}/>
+                        <TextInput 
+                            style={styles.input} 
+                            placeholder="Correo Electrónico" 
+                            placeholderTextColor="#888" 
+                            keyboardType="email-address" 
+                            autoCapitalize="none" 
+                            value={email} 
+                            onChangeText={setEmail}
+                        />
                     </View>
 
                     <View style={styles.inputContainer}>
                         <Icon name="lock" size={20} color="#888" style={styles.inputIcon} />
-                        <TextInput style={styles.input} placeholder="Contraseña" placeholderTextColor="#888" secureTextEntry={!isPasswordVisible} value={password} onChangeText={setPassword}/>
+                        <TextInput
+                          style={[
+                            styles.input,
+                            { color: '#000', fontFamily: undefined },
+                          ]}
+                          textAlignVertical="center"
+                          placeholder="Contraseña"
+                          placeholderTextColor="#888"
+                          secureTextEntry={!isPasswordVisible}
+                          value={password}
+                          onChangeText={setPassword}
+                        />
                         <TouchableOpacity onPress={() => setIsPasswordVisible(!isPasswordVisible)}>
                            <Icon name={isPasswordVisible ? "eye-slash" : "eye"} size={20} color={COLOR_PRIMARY_GREEN} style={styles.eyeIcon}/>
                         </TouchableOpacity>
                     </View>
 
-                    {/* --- 👇 MODIFICACIÓN AQUÍ 👇 --- */}
                     <TouchableOpacity
                         style={styles.forgotPassword}
-                        onPress={() => navigation.navigate('ForgotPassword')} // Navega a la pantalla
-                        disabled={isLoading} // Deshabilitado si está cargando
+                        onPress={() => navigation.navigate('ForgotPassword')}
+                        disabled={isLoading}
                     >
                         <Text style={styles.forgotPasswordText}>¿Olvidaste tu contraseña?</Text>
                     </TouchableOpacity>
@@ -125,4 +144,4 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
     );
 };
 
-export default LoginScreen;
+export default LoginScreen; 
