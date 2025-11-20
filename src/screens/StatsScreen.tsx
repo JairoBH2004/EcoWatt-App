@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
     View, Text, ImageBackground, StatusBar,
     ScrollView, ActivityIndicator, Dimensions, AppState,
-    TouchableOpacity, Modal, Alert 
+    TouchableOpacity, Modal, Alert, StyleSheet
 } from 'react-native';
 import { BarChart, LineChart, lineDataItem } from 'react-native-gifted-charts';
 import Icon from 'react-native-vector-icons/FontAwesome5';
@@ -11,10 +11,9 @@ import { statsStyles } from '../styles/StatsStyles';
 import { useAuthStore } from '../store/useAuthStore';
 import { getHistoryGraph, HistoryDataPoint, getDevices } from '../services/authService';
 
-// --- NUEVAS IMPORTACIONES PARA REPORTES ---
-import { generateEcoWattReport, MonthlyReportData } from '../services/PDFGenerator';
+// --- IMPORTACIONES PARA REPORTES ---
+import { generateEcoWattReport } from '../services/PDFGenerator';
 import { getCurrentMonthlyReport } from '../services/reportService';
-// ------------------------------------------
 
 const ECOWATT_BACKGROUND = require('../assets/fondo.jpg');
 const PRIMARY_GREEN = '#00FF7F';
@@ -35,41 +34,43 @@ const MAX_REALTIME_POINTS = 30;
 const StatsScreen = () => {
     const { token, logout } = useAuthStore();
 
+    // Estados de Gráficas
     const [dailyData, setDailyData] = useState<ChartDataItem[]>([]);
     const [weeklyData, setWeeklyData] = useState<ChartDataItem[]>([]);
     const [monthlyData, setMonthlyData] = useState<ChartDataItem[]>([]);
+    
+    // Estados de Carga
     const [isLoadingHistory, setIsLoadingHistory] = useState(true); 
     const [historyError, setHistoryError] = useState('');
 
+    // Estados de WebSocket / Tiempo Real
     const [deviceId, setDeviceId] = useState<number | null>(null);
     const [realtimeData, setRealtimeData] = useState<lineDataItem[]>([]); 
     const [currentWatts, setCurrentWatts] = useState<number | null>(null);
     const [wsStatus, setWsStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('disconnected');
-    
     const [maxChartValue, setMaxChartValue] = useState(100); 
+    
+    // Refs WebSocket
     const ws = useRef<WebSocket | null>(null);
     const reconnectTimeoutRef = useRef<number | null>(null);
     const reconnectAttemptsRef = useRef(0);
     const MAX_RECONNECT_ATTEMPTS = 3;
 
-    // --- NUEVO ESTADO PARA GENERACIÓN DE REPORTE ---
+    // Estado Reporte PDF
     const [isGeneratingReport, setIsGeneratingReport] = useState(false);
-    // -----------------------------------------------
 
-    // --- ESTADOS PARA SELECTORES DE FECHA ---
+    // Selectores de Fecha
     const [selectedDailyDate, setSelectedDailyDate] = useState(new Date());
     const [selectedWeeklyDate, setSelectedWeeklyDate] = useState(new Date());
     const [selectedMonthlyDate, setSelectedMonthlyDate] = useState(new Date());
-
     const [showDailyPicker, setShowDailyPicker] = useState(false);
     const [showWeeklyPicker, setShowWeeklyPicker] = useState(false);
     const [showMonthlyPicker, setShowMonthlyPicker] = useState(false);
 
-    // Formateo de fechas
+    // --- HELPERS DE FORMATO ---
     const formatDateLabel = (timestamp: string, format: 'hour' | 'weekday' | 'dayMonth') => {
         const date = new Date(timestamp);
         if (isNaN(date.getTime())) return '?';
-
         if (format === 'hour') {
             let hours = date.getHours();
             const ampm = hours >= 12 ? 'pm' : 'am';
@@ -77,16 +78,11 @@ const StatsScreen = () => {
             hours = hours ? hours : 12; 
             return `${hours} ${ampm}`;
         }
-        if (format === 'weekday') {
-            return date.toLocaleDateString('es-MX', { weekday: 'short' }).replace('.', ''); 
-        }
-        if (format === 'dayMonth') {
-            return date.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }).replace('.', '');
-        }
+        if (format === 'weekday') return date.toLocaleDateString('es-MX', { weekday: 'short' }).replace('.', ''); 
+        if (format === 'dayMonth') return date.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }).replace('.', '');
         return '';
     };
 
-    // --- FUNCIONES PARA GENERAR OPCIONES DE FECHA ---
     const generateDailyOptions = () => {
         const options = [];
         const today = new Date();
@@ -120,70 +116,53 @@ const StatsScreen = () => {
         return options;
     };
 
-    const formatDailyLabel = (date: Date) => {
-        return date.toLocaleDateString('es-MX', { 
-            weekday: 'short', 
-            day: 'numeric', 
-            month: 'short',
-            year: 'numeric'
-        });
-    };
+    const formatDailyLabel = (date: Date) => date.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 
     const formatWeeklyLabel = (date: Date) => {
         const startOfWeek = new Date(date);
         startOfWeek.setDate(date.getDate() - date.getDay());
         const endOfWeek = new Date(startOfWeek);
         endOfWeek.setDate(startOfWeek.getDate() + 6);
-        
         return `${startOfWeek.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })} - ${endOfWeek.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}`;
     };
 
-    const formatMonthlyLabel = (date: Date) => {
-        return date.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
-    };
+    const formatMonthlyLabel = (date: Date) => date.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
 
-    const getWeekNumber = (date: Date) => {
-        const startOfYear = new Date(date.getFullYear(), 0, 1);
-        const days = Math.floor((date.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000));
-        return Math.ceil((days + startOfYear.getDay() + 1) / 7);
-    };
-
+    // ---------------------------------------------------------
+    // 🚀 EFECTO 1: CARGA DE DATOS (CORREGIDO PARA NO BLOQUEAR)
+    // ---------------------------------------------------------
     useEffect(() => {
-        const loadInitialData = async () => {
+        const loadAllData = async () => {
             if (!token) {
                 setIsLoadingHistory(false);
                 setTimeout(() => logout(), 100);
                 return;
             }
 
+            // 1. PRIORIDAD: Obtener dispositivo para el WebSocket
+            // Lo hacemos fuera del Promise.all masivo para tener el ID rápido
+            try {
+                const devices = await getDevices(token);
+                if (devices.length > 0) {
+                    console.log('✅ Dispositivo encontrado:', devices[0].dev_id);
+                    setDeviceId(devices[0].dev_id); // Esto activa el WebSocket inmediatamente
+                } else {
+                    console.warn('⚠️ No hay dispositivos registrados');
+                }
+            } catch (devErr) {
+                console.error("Error obteniendo dispositivos:", devErr);
+            }
+
+            // 2. SECUNDARIO: Cargar historial (puede tardar, no bloquea lo anterior)
             setIsLoadingHistory(true);
             setHistoryError('');
-            setDeviceId(null); 
-
+            
             try {
-                const [devicesResponse, dailyResponse, weeklyResponse, monthlyResponse] = await Promise.allSettled([
-                    getDevices(token), 
+                const [dailyResponse, weeklyResponse, monthlyResponse] = await Promise.allSettled([
                     getHistoryGraph(token, 'daily'),
                     getHistoryGraph(token, 'weekly'),
                     getHistoryGraph(token, 'monthly'),
                 ]);
-
-                console.log('📱 Respuesta de dispositivos:', devicesResponse);
-
-                if (devicesResponse.status === 'fulfilled' && devicesResponse.value.length > 0) {
-                    console.log('✅ Dispositivos encontrados:', devicesResponse.value.length);
-                    console.log('🆔 Primer dispositivo ID:', devicesResponse.value[0].dev_id);
-                    setDeviceId(devicesResponse.value[0].dev_id); 
-                } else if (devicesResponse.status === 'rejected') {
-                    console.error('❌ Error obteniendo dispositivos:', devicesResponse.reason);
-                    if (!devicesResponse.reason?.message?.includes('404')) {
-                        console.error("Error devices:", devicesResponse.reason);
-                    } else {
-                        console.warn('⚠️ No hay dispositivos registrados (404)');
-                    }
-                } else {
-                    console.warn('⚠️ No hay dispositivos registrados');
-                }
 
                 if (dailyResponse.status === 'fulfilled') {
                     const formatted = dailyResponse.value.data_points.map((p: HistoryDataPoint) => ({
@@ -219,115 +198,81 @@ const StatsScreen = () => {
                 }
 
             } catch (err: any) {
-                console.error('Error cargando datos:', err);
-                setHistoryError('No se pudieron cargar algunos datos históricos.');
+                console.error('Error cargando historial:', err);
+                setHistoryError('Error al cargar historial.');
             } finally {
                 setIsLoadingHistory(false);
             }
         };
 
-        loadInitialData();
+        loadAllData();
     }, [token, logout]);
 
+
+    // ---------------------------------------------------------
+    // 🔌 EFECTO 2: WEBSOCKET (CORREGIDO)
+    // ---------------------------------------------------------
     useEffect(() => {
         const connectWebSocket = () => {
-            if (!token || !deviceId) {
-                console.log('🔍 WebSocket no puede conectar:');
-                console.log('   - Token:', token ? '✅ Existe' : '❌ No existe');
-                console.log('   - DeviceId:', deviceId || '❌ No existe');
-                return;
-            }
+            // CORRECCIÓN: Eliminamos !isLoadingHistory de la condición.
+            // Si tenemos token y deviceId, conectamos de una.
+            if (!token || !deviceId) return;
 
-            // Si ya hay una conexión activa, no crear otra
             if (ws.current && (ws.current.readyState === WebSocket.CONNECTING || ws.current.readyState === WebSocket.OPEN)) {
-                console.log('⚠️ Ya existe una conexión WebSocket activa');
                 return;
             }
 
             setWsStatus('connecting');
             const wsUrl = `wss://core-cloud.dev/ws/live/${deviceId}?token=${token}`;
-            console.log('🔌 Intentando conectar WebSocket...');
-            console.log('📍 URL:', wsUrl);
-            console.log('🆔 Device ID:', deviceId);
-            console.log('🔄 Intento:', reconnectAttemptsRef.current + 1);
+            console.log('🔌 Conectando WS a:', wsUrl);
             
             const socket = new WebSocket(wsUrl);
 
             socket.onopen = () => {
-                console.log('✅ WebSocket conectado exitosamente!');
+                console.log('✅ WS Conectado');
                 setWsStatus('connected');
-                setRealtimeData([]); 
-                setCurrentWatts(null);
-                reconnectAttemptsRef.current = 0; // Resetear intentos de reconexión
+                reconnectAttemptsRef.current = 0;
             };
 
             socket.onmessage = (event) => {
-                console.log('📨 Mensaje recibido del WebSocket:', event.data);
                 try {
                     const message = JSON.parse(event.data);
-                    console.log('📦 Mensaje parseado:', message);
-                    
                     if (typeof message.watts === 'number') {
                         const newWatts = message.watts;
-                        console.log('⚡ Watts recibidos:', newWatts);
-                        
-                        const newPoint: lineDataItem = { 
-                            value: newWatts
-                        };
-                        
                         setCurrentWatts(newWatts);
 
-                        setMaxChartValue(prevMax => {
-                            const newTargetMax = newWatts * 1.3; 
-                            return newTargetMax > prevMax ? newTargetMax : prevMax;
-                        });
+                        // Ajuste dinámico del máximo de la gráfica
+                        setMaxChartValue(prev => Math.max(prev, newWatts * 1.3));
 
-                        setRealtimeData(prevData => {
-                            const newData = [...prevData, newPoint];
+                        setRealtimeData(prev => {
+                            const newData = [...prev, { value: newWatts }];
                             return newData.length > MAX_REALTIME_POINTS
                                 ? newData.slice(newData.length - MAX_REALTIME_POINTS)
                                 : newData;
                         });
-                    } else {
-                        console.warn('⚠️ Mensaje sin watts válidos:', message);
                     }
                 } catch (e) { 
-                    console.error('❌ Error parseando mensaje WebSocket:', e);
-                    console.error('📄 Datos crudos:', event.data);
+                    console.error('Error parsing WS msg'); 
                 }
             };
 
             socket.onerror = (error) => {
-                console.error('❌ Error en WebSocket:', error);
-                console.error('📍 URL que falló:', wsUrl);
+                console.error('❌ Error WS:', error);
                 setWsStatus('error');
             };
 
             socket.onclose = (event) => {
-                console.log('🔌 WebSocket cerrado');
-                console.log('   - Código:', event.code);
-                console.log('   - Razón:', event.reason || 'Sin razón especificada');
-                //console.log('   - Limpio:', event.wasClean ? 'Sí' : 'No');
-                
+                console.log('🔌 WS Cerrado code:', event.code);
                 ws.current = null;
-                setCurrentWatts(null);
                 
-                // Intentar reconectar solo si no fue un cierre intencional y no se excedieron los intentos
                 if (event.code !== 1000 && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
                     reconnectAttemptsRef.current += 1;
-                    const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 10000); // Backoff exponencial
-                    console.log(`🔄 Intentando reconectar en ${delay/1000} segundos... (Intento ${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})`);
-                    
+                    const delay = 1000 * reconnectAttemptsRef.current;
+                    console.log(`🔄 Reconectando en ${delay}ms...`);
                     setWsStatus('connecting');
-                    reconnectTimeoutRef.current = setTimeout(() => {
-                        connectWebSocket();
-                    }, delay);
-                } else if (event.code === 1000) {
-                    console.log('ℹ️ Conexión cerrada normalmente por el servidor. No se reintentará automáticamente.');
-                    setWsStatus('disconnected');
+                    reconnectTimeoutRef.current = setTimeout(connectWebSocket, delay);
                 } else {
-                    console.log('⚠️ Máximo de intentos de reconexión alcanzado');
-                    setWsStatus('error');
+                    setWsStatus('disconnected');
                 }
             };
 
@@ -335,18 +280,15 @@ const StatsScreen = () => {
         };
 
         const disconnectWebSocket = () => {
-            if (reconnectTimeoutRef.current) {
-                clearTimeout(reconnectTimeoutRef.current);
-                reconnectTimeoutRef.current = null;
-            }
+            if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
             if (ws.current) {
                 ws.current.close();
                 ws.current = null;
             }
         };
 
-        // Solo conectar si hay token y deviceId, y si no hay carga de historial
-        if (!isLoadingHistory && token && deviceId) {
+        // Se inicia la conexión en cuanto hay DeviceID
+        if (deviceId && token) {
             connectWebSocket();
         }
 
@@ -354,8 +296,8 @@ const StatsScreen = () => {
             if (nextAppState !== 'active') {
                 disconnectWebSocket(); 
             } else {
-                if (!ws.current && deviceId && token && !isLoadingHistory) {
-                   setTimeout(connectWebSocket, 1000);
+                if (!ws.current && deviceId && token) {
+                   setTimeout(connectWebSocket, 500);
                 }
             }
         });
@@ -364,123 +306,70 @@ const StatsScreen = () => {
             appStateSubscription.remove();
             disconnectWebSocket();
         };
-    }, [token, deviceId, isLoadingHistory]);
+    }, [token, deviceId]); // Quitamos isLoadingHistory de las dependencias
 
-    // --- LÓGICA DE GENERACIÓN DE REPORTE PDF ---
+
+    // ---------------------------------------------------------
+    // 📄 GENERACIÓN DE REPORTE (CORREGIDO)
+    // ---------------------------------------------------------
     const handleGenerateReport = async () => {
-        if (!token) {
-            Alert.alert("Error", "No tienes permisos para generar el reporte.");
-            return;
-        }
-
+        if (!token) return;
         setIsGeneratingReport(true);
         
         try {
-            // 1. Obtener los datos del reporte de la API
+            console.log("📥 Solicitando datos del reporte...");
             const reportData = await getCurrentMonthlyReport(token);
-            console.log("✅ Datos del reporte obtenidos de la API");
             
-            // 2. Generar el PDF
+            console.log("🔨 Generando PDF...");
             const result = await generateEcoWattReport(reportData);
 
             if (result.success) {
                 Alert.alert(
-                    "Reporte Generado", 
-                    `El reporte mensual ha sido guardado exitosamente. Puede encontrarlo en: ${result.path}`
+                    "¡Reporte Listo!", 
+                    `Se ha guardado en: \n${result.path}`,
+                    [{ text: "OK" }]
                 );
             } else {
-                // --------------------------------------------------------------
-                // FIX: Convertimos el objeto de error a String para evitar el fallo
-                // --------------------------------------------------------------
-                const errorMessage = String(result.error) || "Ocurrió un error desconocido al generar el PDF.";
-                Alert.alert("Error de PDF", errorMessage);
+                // CORRECCIÓN: Manejo seguro del objeto error
+                const errString = typeof result.error === 'object' 
+                    ? JSON.stringify(result.error) 
+                    : String(result.error);
+                Alert.alert("Error al crear PDF", errString);
             }
 
         } catch (error: any) {
-            console.error("Error completo en la generación:", error);
-            Alert.alert("Error de API", error.message || "Fallo al obtener los datos del reporte mensual.");
+            console.error("Error generando reporte:", error);
+            Alert.alert("Error", error.message || "No se pudo generar el reporte.");
         } finally {
             setIsGeneratingReport(false);
         }
     };
-    // ---------------------------------------------
-
-
-    if (isLoadingHistory || isGeneratingReport) {
-        return (
-            <View style={statsStyles.centeredContainer}>
-                <ActivityIndicator size="large" color={PRIMARY_GREEN} />
-                <Text style={statsStyles.loadingText}>
-                    {isGeneratingReport ? 'Generando Reporte PDF...' : 'Cargando análisis...'}
-                </Text>
-            </View>
-        );
-    }
 
     const calcMax = (data: ChartDataItem[]) => 
         data.length > 0 ? Math.max(...data.map(d => d.value || 0)) * 1.2 : 10;
 
-    const maxDailyValue = calcMax(dailyData);
-    const maxWeeklyValue = calcMax(weeklyData);
-    const maxMonthlyValue = calcMax(monthlyData);
-
-    const chartContainerWidth = screenWidth - 80; // Más margen para que no se salga
+    const chartContainerWidth = screenWidth - 80; 
     const stableSpacing = chartContainerWidth / MAX_REALTIME_POINTS;
 
-    // --- COMPONENTE DE SELECTOR DE FECHA (sin cambios) ---
-    const DatePickerModal = ({ 
-        visible, 
-        onClose, 
-        options, 
-        selectedDate, 
-        onSelect, 
-        formatLabel 
-    }: { 
-        visible: boolean; 
-        onClose: () => void; 
-        options: Date[]; 
-        selectedDate: Date; 
-        onSelect: (date: Date) => void;
-        formatLabel: (date: Date) => string;
-    }) => (
-        <Modal
-            visible={visible}
-            transparent={true}
-            animationType="slide"
-            onRequestClose={onClose}
-        >
+    // Componente Modal Fecha (Sin cambios)
+    const DatePickerModal = ({ visible, onClose, options, selectedDate, onSelect, formatLabel }: any) => (
+        <Modal visible={visible} transparent={true} animationType="slide" onRequestClose={onClose}>
             <View style={statsStyles.modalBackground}>
                 <View style={statsStyles.modalContainer}>
                     <View style={statsStyles.modalHeader}>
                         <Text style={statsStyles.modalTitle}>Seleccionar Fecha</Text>
-                        <TouchableOpacity onPress={onClose}>
-                            <Icon name="times" size={24} color="#fff" />
-                        </TouchableOpacity>
+                        <TouchableOpacity onPress={onClose}><Icon name="times" size={24} color="#fff" /></TouchableOpacity>
                     </View>
                     <ScrollView style={statsStyles.modalScroll}>
-                        {options.map((date, index) => (
+                        {options.map((date: Date, index: number) => (
                             <TouchableOpacity
                                 key={index}
-                                style={[
-                                    statsStyles.dateOption,
-                                    date.toDateString() === selectedDate.toDateString() && 
-                                    statsStyles.dateOptionSelected
-                                ]}
-                                onPress={() => {
-                                    onSelect(date);
-                                    onClose();
-                                }}
+                                style={[statsStyles.dateOption, date.toDateString() === selectedDate.toDateString() && statsStyles.dateOptionSelected]}
+                                onPress={() => { onSelect(date); onClose(); }}
                             >
-                                <Text style={[
-                                    statsStyles.dateOptionText,
-                                    date.toDateString() === selectedDate.toDateString() && 
-                                    statsStyles.dateOptionTextSelected
-                                ]}>
+                                <Text style={[statsStyles.dateOptionText, date.toDateString() === selectedDate.toDateString() && statsStyles.dateOptionTextSelected]}>
                                     {formatLabel(date)}
                                 </Text>
-                                {date.toDateString() === selectedDate.toDateString() && (
-                                    <Icon name="check" size={18} color={PRIMARY_GREEN} />
-                                )}
                             </TouchableOpacity>
                         ))}
                     </ScrollView>
@@ -490,220 +379,157 @@ const StatsScreen = () => {
     );
 
     return (
-        <ImageBackground
-            source={ECOWATT_BACKGROUND}
-            style={statsStyles.container}
-            resizeMode="cover"
-        >
+        <ImageBackground source={ECOWATT_BACKGROUND} style={statsStyles.container} resizeMode="cover">
             <StatusBar barStyle="light-content" backgroundColor="transparent" translucent={true} />
 
             <ScrollView contentContainerStyle={statsStyles.scrollViewContent}>
-                <View style={[statsStyles.header, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingRight: 20 }]}>
+                {/* Header Simple */}
+                <View style={statsStyles.header}>
                     <Text style={statsStyles.headerTitle}>Análisis de Consumo</Text>
-                    
-                    {/* BOTÓN PARA GENERAR PDF */}
-                    <TouchableOpacity 
-                        onPress={handleGenerateReport}
-                        disabled={isGeneratingReport}
-                    >
-                        <Icon name="file-pdf" size={24} color="white" />
-                    </TouchableOpacity>
                 </View>
 
-                {/* --- TIEMPO REAL (Sin cambios) --- */}
+                {/* --- TIEMPO REAL --- */}
                 <View style={statsStyles.card}>
-                    <Text style={statsStyles.title}>Consumo Actual (Watts)</Text>
+                    <View style={localStyles.cardHeaderRow}>
+                        <Text style={statsStyles.title}>Consumo Actual</Text>
+                        <View style={[localStyles.statusBadge, { backgroundColor: wsStatus === 'connected' ? PRIMARY_GREEN : '#555' }]}>
+                            <Text style={localStyles.statusText}>{wsStatus === 'connected' ? 'LIVE' : 'OFF'}</Text>
+                        </View>
+                    </View>
                     
-                    {wsStatus === 'connected' ? (
-                        <>
-                            <Text style={[statsStyles.currentValue, { color: LIVE_COLOR }]}>
-                                {currentWatts !== null ? `${currentWatts.toFixed(0)} W` : '--- W'}
-                            </Text>
-                            <View style={{ alignItems: 'center', marginTop: 10, width: '100%', overflow: 'hidden' }}>
-                                {realtimeData.length > 0 ? (
-                                    <LineChart
-                                        areaChart
-                                        curved
-                                        data={realtimeData}
-                                        height={150}
-                                        width={chartContainerWidth}
-                                        spacing={stableSpacing}
-                                        color={LIVE_COLOR}
-                                        thickness={2}
-                                        startFillColor={LIVE_COLOR} 
-                                        endFillColor={LIVE_COLOR}   
-                                        startOpacity={0.3}       
-                                        endOpacity={0.05}         
-                                        hideRules
-                                        hideYAxisText
-                                        textFontSize={0} 
-                                        dataPointLabelWidth={0}
-                                        hideDataPoints={false} 
-                                        dataPointsColor={LIVE_COLOR}
-                                        dataPointsRadius={3}
-                                        yAxisThickness={0}
-                                        xAxisThickness={0}
-                                        maxValue={maxChartValue}
-                                        initialSpacing={0}
-                                        endSpacing={0}
-                                    />
-                                ) : (
-                                    <View style={{ height: 150, justifyContent: 'center' }}>
-                                        <ActivityIndicator color={LIVE_COLOR} />
-                                        <Text style={{color:'white', marginTop:10}}>Esperando datos...</Text>
-                                    </View>
-                                )}
-                            </View>
-                        </>
-                    ) : (
-                        <Text style={statsStyles.subtitle}>
-                            {wsStatus === 'connecting' ? 'Conectando...' : 'Desconectado'}
-                        </Text>
+                    <Text style={[statsStyles.currentValue, { color: LIVE_COLOR, alignSelf: 'center', marginVertical: 10 }]}>
+                        {currentWatts !== null ? `${currentWatts.toFixed(0)} W` : '---'}
+                    </Text>
+                    
+                    <View style={{ alignItems: 'center', overflow: 'hidden' }}>
+                        <LineChart
+                            areaChart
+                            curved
+                            data={realtimeData.length > 0 ? realtimeData : [{value:0}]}
+                            height={150}
+                            width={chartContainerWidth}
+                            spacing={stableSpacing}
+                            color={LIVE_COLOR}
+                            startFillColor={LIVE_COLOR} 
+                            endFillColor={LIVE_COLOR}   
+                            startOpacity={0.3} endOpacity={0.05}         
+                            hideRules hideYAxisText hideDataPoints
+                            xAxisThickness={0} yAxisThickness={0}
+                            maxValue={maxChartValue}
+                        />
+                    </View>
+                </View>
+
+                {/* --- DIARIO --- */}
+                <View style={statsStyles.card}>
+                    <View style={localStyles.cardHeaderRow}>
+                        <Text style={statsStyles.title}>Diario (kWh)</Text>
+                        <TouchableOpacity style={statsStyles.dateSelector} onPress={() => setShowDailyPicker(true)}>
+                            <Text style={statsStyles.dateSelectorText}>{formatDailyLabel(selectedDailyDate)}</Text>
+                            <Icon name="chevron-down" size={12} color={PRIMARY_GREEN} />
+                        </TouchableOpacity>
+                    </View>
+                    {isLoadingHistory ? <ActivityIndicator color={PRIMARY_GREEN} /> : (
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                            <BarChart data={dailyData} barWidth={20} spacing={15} rulesColor="rgba(255,255,255,0.1)" yAxisTextStyle={{color:'#ccc'}} xAxisLabelTextStyle={{color:'white'}} xAxisThickness={0} yAxisThickness={0} maxValue={calcMax(dailyData)} noOfSections={3} isAnimated />
+                        </ScrollView>
                     )}
                 </View>
 
-                {/* --- DIARIO (CON SELECTOR) --- */}
+                {/* --- SEMANAL --- */}
                 <View style={statsStyles.card}>
-                    <Text style={statsStyles.title}>Consumo Diario (kWh)</Text>
-                    <TouchableOpacity 
-                        style={statsStyles.dateSelector}
-                        onPress={() => setShowDailyPicker(true)}
-                    >
-                        <Icon name="calendar-alt" size={16} color={PRIMARY_GREEN} />
-                        <Text style={statsStyles.dateSelectorText}>
-                            {formatDailyLabel(selectedDailyDate)}
-                        </Text>
-                        <Icon name="chevron-down" size={14} color={PRIMARY_GREEN} />
-                    </TouchableOpacity>
-                    {dailyData.length > 0 ? (
+                    <View style={localStyles.cardHeaderRow}>
+                        <Text style={statsStyles.title}>Semanal (kWh)</Text>
+                        <TouchableOpacity style={statsStyles.dateSelector} onPress={() => setShowWeeklyPicker(true)}>
+                            <Text style={statsStyles.dateSelectorText}>{formatWeeklyLabel(selectedWeeklyDate)}</Text>
+                            <Icon name="chevron-down" size={12} color={PRIMARY_GREEN} />
+                        </TouchableOpacity>
+                    </View>
+                    {isLoadingHistory ? <ActivityIndicator color={PRIMARY_GREEN} /> : (
                         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                            <BarChart
-                                data={dailyData}
-                                barWidth={20}
-                                spacing={15}
-                                rulesColor="rgba(255,255,255,0.1)"
-                                yAxisTextStyle={{ color: '#ccc', fontSize: 10 }}
-                                xAxisLabelTextStyle={{ color: 'white', fontSize: 10 }}
-                                xAxisThickness={0}
-                                yAxisThickness={0}
-                                maxValue={maxDailyValue}
-                                noOfSections={3}
-                                isAnimated
-                                renderTooltip={(item: any) => (
-                                    <View style={{ backgroundColor: '#333', padding: 5, borderRadius: 5 }}>
-                                        <Text style={{ color: 'white' }}>{item.value.toFixed(3)} kWh</Text>
-                                    </View>
-                                )}
-                            />
+                            <BarChart data={weeklyData} barWidth={30} spacing={20} rulesColor="rgba(255,255,255,0.1)" yAxisTextStyle={{color:'#ccc'}} xAxisLabelTextStyle={{color:'white'}} xAxisThickness={0} yAxisThickness={0} maxValue={calcMax(weeklyData)} noOfSections={3} isAnimated />
                         </ScrollView>
-                    ) : <Text style={statsStyles.subtitle}>Sin datos para esta fecha.</Text>}
+                    )}
                 </View>
 
-                {/* --- SEMANAL (CON SELECTOR) --- */}
+                {/* --- MENSUAL Y REPORTE --- */}
                 <View style={statsStyles.card}>
-                    <Text style={statsStyles.title}>Consumo Semanal (kWh)</Text>
-                    <TouchableOpacity 
-                        style={statsStyles.dateSelector}
-                        onPress={() => setShowWeeklyPicker(true)}
-                    >
-                        <Icon name="calendar-week" size={16} color={PRIMARY_GREEN} />
-                        <Text style={statsStyles.dateSelectorText}>
-                            {formatWeeklyLabel(selectedWeeklyDate)}
-                        </Text>
-                        <Icon name="chevron-down" size={14} color={PRIMARY_GREEN} />
-                    </TouchableOpacity>
-                    {weeklyData.length > 0 ? (
-                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                            <BarChart
-                                data={weeklyData}
-                                barWidth={30}
-                                spacing={20}
-                                rulesColor="rgba(255,255,255,0.1)"
-                                yAxisTextStyle={{ color: '#ccc', fontSize: 10 }}
-                                xAxisLabelTextStyle={{ color: 'white', fontSize: 10 }}
-                                xAxisThickness={0}
-                                yAxisThickness={0}
-                                maxValue={maxWeeklyValue}
-                                noOfSections={3}
-                                isAnimated
-                                renderTooltip={(item: any) => (
-                                    <View style={{ backgroundColor: '#333', padding: 5, borderRadius: 5 }}>
-                                        <Text style={{ color: 'white' }}>{item.value.toFixed(2)} kWh</Text>
-                                    </View>
-                                )}
-                            />
-                        </ScrollView>
-                    ) : <Text style={statsStyles.subtitle}>Sin datos para esta semana.</Text>}
-                </View>
+                    <View style={localStyles.cardHeaderRow}>
+                        <Text style={statsStyles.title}>Mensual</Text>
+                        
+                        {/* 🔥 BOTÓN REUBICADO AQUÍ 🔥 */}
+                        <TouchableOpacity 
+                            style={localStyles.pdfButton}
+                            onPress={handleGenerateReport}
+                            disabled={isGeneratingReport}
+                        >
+                            {isGeneratingReport ? (
+                                <ActivityIndicator size="small" color="#fff" />
+                            ) : (
+                                <>
+                                    <Icon name="file-pdf" size={14} color="#fff" style={{marginRight: 6}} />
+                                    <Text style={localStyles.pdfButtonText}>Reporte</Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+                    </View>
 
-                 {/* --- MENSUAL (CON SELECTOR) --- */}
-                 <View style={statsStyles.card}>
-                    <Text style={statsStyles.title}>Consumo Mensual (kWh)</Text>
-                    <TouchableOpacity 
-                        style={statsStyles.dateSelector}
-                        onPress={() => setShowMonthlyPicker(true)}
-                    >
-                        <Icon name="calendar" size={16} color={PRIMARY_GREEN} />
-                        <Text style={statsStyles.dateSelectorText}>
-                            {formatMonthlyLabel(selectedMonthlyDate)}
-                        </Text>
-                        <Icon name="chevron-down" size={14} color={PRIMARY_GREEN} />
+                    <TouchableOpacity style={[statsStyles.dateSelector, {alignSelf:'flex-start', marginBottom: 10}]} onPress={() => setShowMonthlyPicker(true)}>
+                        <Text style={statsStyles.dateSelectorText}>{formatMonthlyLabel(selectedMonthlyDate)}</Text>
+                        <Icon name="chevron-down" size={12} color={PRIMARY_GREEN} />
                     </TouchableOpacity>
-                    {monthlyData.length > 0 ? (
+
+                    {isLoadingHistory ? <ActivityIndicator color={PRIMARY_GREEN} /> : (
                         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                            <BarChart
-                                data={monthlyData}
-                                barWidth={30}
-                                spacing={20}
-                                rulesColor="rgba(255,255,255,0.1)"
-                                yAxisTextStyle={{ color: '#ccc', fontSize: 10 }}
-                                xAxisLabelTextStyle={{ color: 'white', fontSize: 10 }}
-                                xAxisThickness={0}
-                                yAxisThickness={0}
-                                maxValue={maxMonthlyValue}
-                                noOfSections={3}
-                                isAnimated
-                                renderTooltip={(item: any) => (
-                                    <View style={{ backgroundColor: '#333', padding: 5, borderRadius: 5 }}>
-                                        <Text style={{ color: 'white' }}>{item.value.toFixed(2)} kWh</Text>
-                                    </View>
-                                )}
-                            />
+                            <BarChart data={monthlyData} barWidth={30} spacing={20} rulesColor="rgba(255,255,255,0.1)" yAxisTextStyle={{color:'#ccc'}} xAxisLabelTextStyle={{color:'white'}} xAxisThickness={0} yAxisThickness={0} maxValue={calcMax(monthlyData)} noOfSections={3} isAnimated />
                         </ScrollView>
-                    ) : <Text style={statsStyles.subtitle}>Sin datos para este mes.</Text>}
+                    )}
                 </View>
 
             </ScrollView>
 
-            {/* --- MODALES DE SELECCIÓN --- */}
-            <DatePickerModal
-                visible={showDailyPicker}
-                onClose={() => setShowDailyPicker(false)}
-                options={generateDailyOptions()}
-                selectedDate={selectedDailyDate}
-                onSelect={setSelectedDailyDate}
-                formatLabel={formatDailyLabel}
-            />
-
-            <DatePickerModal
-                visible={showWeeklyPicker}
-                onClose={() => setShowWeeklyPicker(false)}
-                options={generateWeeklyOptions()}
-                selectedDate={selectedWeeklyDate}
-                onSelect={setSelectedWeeklyDate}
-                formatLabel={formatWeeklyLabel}
-            />
-
-            <DatePickerModal
-                visible={showMonthlyPicker}
-                onClose={() => setShowMonthlyPicker(false)}
-                options={generateMonthlyOptions()}
-                selectedDate={selectedMonthlyDate}
-                onSelect={setSelectedMonthlyDate}
-                formatLabel={formatMonthlyLabel}
-            />
+            {/* MODALES */}
+            <DatePickerModal visible={showDailyPicker} onClose={()=>setShowDailyPicker(false)} options={generateDailyOptions()} selectedDate={selectedDailyDate} onSelect={setSelectedDailyDate} formatLabel={formatDailyLabel} />
+            <DatePickerModal visible={showWeeklyPicker} onClose={()=>setShowWeeklyPicker(false)} options={generateWeeklyOptions()} selectedDate={selectedWeeklyDate} onSelect={setSelectedWeeklyDate} formatLabel={formatWeeklyLabel} />
+            <DatePickerModal visible={showMonthlyPicker} onClose={()=>setShowMonthlyPicker(false)} options={generateMonthlyOptions()} selectedDate={selectedMonthlyDate} onSelect={setSelectedMonthlyDate} formatLabel={formatMonthlyLabel} />
         </ImageBackground>
     );
 };
+
+// Estilos locales para ajustes rápidos de UI
+const localStyles = StyleSheet.create({
+    cardHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 15,
+        width: '100%'
+    },
+    statusBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 10,
+    },
+    statusText: {
+        color: 'white',
+        fontSize: 10,
+        fontWeight: 'bold'
+    },
+    pdfButton: {
+        flexDirection: 'row',
+        backgroundColor: '#444', // Un gris oscuro elegante
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 20,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: PRIMARY_GREEN,
+    },
+    pdfButtonText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: '600',
+    }
+});
 
 export default StatsScreen;
