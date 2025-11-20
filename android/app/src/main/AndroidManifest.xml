@@ -2,11 +2,24 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     
+    <!-- Permisos Bluetooth existentes -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    
+    <!-- Permisos de ubicación (requeridos para escanear WiFi) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    
+    <!-- Permisos WiFi -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    
+    <!-- Para Android 13+ (API 33+) -->
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" 
+                     android:usesPermissionFlags="neverForLocation" />
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/> 
 
@@ -17,7 +30,7 @@
       android:roundIcon="@mipmap/ic_launcher_round"
       android:allowBackup="false"
       android:theme="@style/AppTheme"
-      android:usesCleartextTraffic="${usesCleartextTraffic}" 
+      android:usesCleartextTraffic="true"
       android:supportsRtl="true">
       
       <activity

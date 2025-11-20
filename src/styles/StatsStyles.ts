@@ -1,38 +1,33 @@
 import { StyleSheet } from 'react-native';
 
-// Redefinimos la opacidad para que sean más transparentes
-const SEMI_TRANSPARENT_BLACK = 'rgba(0, 0, 0, 0.4)'; // 40% de opacidad
+const SEMI_TRANSPARENT_BLACK = 'rgba(0, 0, 0, 0.4)';
 const PRIMARY_GREEN = '#00FF7F';
-const ERROR_RED = '#FF6347'; // Color para errores
-const LIGHT_TEXT = '#FFFFFF'; // Texto blanco general
+const ERROR_RED = '#FF6347';
+const LIGHT_TEXT = '#FFFFFF';
 
 export const statsStyles = StyleSheet.create({
   container: {
     flex: 1,
-    // Eliminado el backgroundColor para que se vea la imagen
-    // Eliminado paddingTop aquí, se maneja en ScrollView
   },
-  // Añadido padding horizontal al ScrollView en lugar del container
   scrollViewContent: {
       paddingBottom: 100,
-      paddingTop: 60, // Espacio para el header y StatusBar
-      paddingHorizontal: 20, // Padding lateral
+      paddingTop: 60,
+      paddingHorizontal: 20,
   },
   header: {
     marginBottom: 20,
-    // Añadido para asegurar que esté arriba
     marginTop: 20,
   },
   headerTitle: {
     fontSize: 28,
     fontWeight: 'bold',
     color: LIGHT_TEXT,
-    textAlign: 'center', // Centrado para mejor apariencia
+    textAlign: 'center',
   },
   card: {
     padding: 20,
     borderRadius: 15,
-    backgroundColor: SEMI_TRANSPARENT_BLACK, // Fondo semitransparente
+    backgroundColor: SEMI_TRANSPARENT_BLACK,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
@@ -43,38 +38,33 @@ export const statsStyles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: PRIMARY_GREEN, // Verde primario para títulos
-    marginBottom: 15, // Más espacio antes de la gráfica
-    textAlign: 'center', // Centrado para mejor apariencia
+    color: PRIMARY_GREEN,
+    marginBottom: 15,
+    textAlign: 'center',
   },
   subtitle: {
     fontSize: 16,
-    color: '#E0E0E0', // Texto claro
-    // Eliminado height, paddingTop y backgroundColor
+    color: '#E0E0E0',
     textAlign: 'center',
-    paddingVertical: 40, // Espacio si no hay datos
+    paddingVertical: 40,
   },
-  footerText: { // No se usa actualmente, pero lo dejamos
+  footerText: {
     marginTop: 15,
     fontSize: 12,
-    color: '#B0B0B0', // Texto grisáceo
+    color: '#B0B0B0',
     textAlign: 'right',
   },
-  // --- 👇 ESTILO AÑADIDO PARA ERRORES 👇 ---
   errorText: {
       fontSize: 16,
-      color: ERROR_RED, // Rojo para errores
+      color: ERROR_RED,
       textAlign: 'center',
       paddingHorizontal: 20,
   },
-  // --- Estilo para centrar contenido (Loading/Error) ---
   centeredContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
-    // Puedes darle un fondo si quieres que cubra la imagen al cargar/error
-    // backgroundColor: 'rgba(10, 25, 47, 0.8)', // Fondo oscuro semitransparente
   },
   loadingText: {
       color: LIGHT_TEXT,
@@ -82,10 +72,87 @@ export const statsStyles = StyleSheet.create({
       fontSize: 16,
   },
   currentValue: {
-      fontSize: 28, // Tamaño grande
+      fontSize: 28,
       fontWeight: 'bold',
       textAlign: 'center',
-      marginBottom: 15, // Espacio antes de la gráfica
-      // El color se aplicará directamente en el componente
+      marginBottom: 15,
+  },
+
+  // --- NUEVOS ESTILOS PARA SELECTORES DE FECHA ---
+  chartHeader: {
+    marginBottom: 15,
+  },
+  dateSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 255, 127, 0.1)',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: PRIMARY_GREEN,
+    marginTop: 10,
+    gap: 8,
+  },
+  dateSelectorText: {
+    color: LIGHT_TEXT,
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+    textAlign: 'center',
+  },
+
+  // --- ESTILOS DEL MODAL ---
+  modalBackground: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContainer: {
+    width: '90%',
+    maxHeight: '70%',
+    backgroundColor: 'rgba(10, 25, 47, 0.95)',
+    borderRadius: 15,
+    borderWidth: 2,
+    borderColor: PRIMARY_GREEN,
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 255, 127, 0.3)',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: PRIMARY_GREEN,
+  },
+  modalScroll: {
+    maxHeight: 400,
+  },
+  dateOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 18,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  dateOptionSelected: {
+    backgroundColor: 'rgba(0, 255, 127, 0.15)',
+  },
+  dateOptionText: {
+    color: LIGHT_TEXT,
+    fontSize: 16,
+    flex: 1,
+  },
+  dateOptionTextSelected: {
+    color: PRIMARY_GREEN,
+    fontWeight: 'bold',
   },
 });
