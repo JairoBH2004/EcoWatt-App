@@ -1,33 +1,14 @@
 import RNFS from 'react-native-fs';
 import { Platform } from 'react-native';
 
-// ---------------------------------------------------------------------------------------
-// FIX: Usamos 'require' en lugar de 'import' para RNHTMLToPDF.
-// Esto soluciona el error: "Module '...' has no default export".
-// ---------------------------------------------------------------------------------------
 const RNHTMLToPDF = require('react-native-html-to-pdf').default || require('react-native-html-to-pdf');
 
+// --- 1. DEFINICIÓN DE TIPOS ---
+export type DailyConsumptionPoint = { date: string; kwh: number; };
+export type TariffLevel = { level_name: string; kwh_consumed: number; price_per_kwh: number; subtotal_mxn: number; };
+export type AlertDetail = { date: string; title: string; body: string; };
+export type Recommendation = { date: string; text: string; };
 
-// --- 1. DEFINICIÓN DE TIPOS (Basado en tu API) ---
-
-export type DailyConsumptionPoint = {
-    date: string;
-    kwh: number;
-};
-
-export type TariffLevel = {
-    level_name: string;
-    kwh_consumed: number;
-    price_per_kwh: number;
-    subtotal_mxn: number;
-};
-
-export type Recommendation = {
-    date: string;
-    text: string;
-};
-
-// Esta es la estructura maestra que coincide con tu JSON de /reports/monthly/current
 export type MonthlyReportData = {
     header: {
         period_month: string;
@@ -61,37 +42,56 @@ export type MonthlyReportData = {
         equivalent_trees_per_year: number;
         comparison_note: string;
     };
-    alerts: any[]; 
+    alerts: AlertDetail[]; 
     recommendations: Recommendation[];
     generated_at: string;
 };
 
-// --- 2. PLANTILLA HTML/CSS PROFESIONAL ---
+// --- 2. LÓGICA DE VENTA (Cálculo de Ahorro) ---
+// Esta función analiza los datos para decirle al usuario cuánto dinero está perdiendo
+const calculateSavingsPitch = (data: MonthlyReportData) => {
+    // Buscamos si existe consumo en la tarifa "Excedente"
+    const excedenteLevel = data.cost_breakdown.tariff_levels.find(
+        (l) => l.level_name.includes("Excedente")
+    );
 
+    if (!excedenteLevel || excedenteLevel.kwh_consumed === 0) {
+        return { 
+            hasSavings: false, 
+            savingsAmount: 0, 
+            note: "¡Excelente! Lograste mantener tu consumo fuera de la tarifa de alto costo." 
+        };
+    }
+
+    return {
+        hasSavings: true,
+        savingsAmount: excedenteLevel.subtotal_mxn,
+        note: `El consumo en tarifa Excedente (la más cara a $${excedenteLevel.price_per_kwh.toFixed(2)}/kWh) representó $${excedenteLevel.subtotal_mxn.toFixed(2)} de tu factura. ¡Reducir este consumo es tu mayor oportunidad de ahorro!`
+    };
+};
+
+// --- 3. PLANTILLA HTML MEJORADA (Estilo Estado de Cuenta) ---
 const getReportHtml = (data: MonthlyReportData): string => {
-    
-    // Generar filas para la tabla de consumo diario
-    const dailyRows = data.consumption_details.daily_consumption.map(point => `
-        <tr>
-            <td>${new Date(point.date).toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })}</td>
-            <td style="text-align: right;">${point.kwh.toFixed(2)} kWh</td>
-        </tr>
-    `).join('');
+    const savings = calculateSavingsPitch(data);
 
-    // Generar filas para la tabla de tarifas
-    const tariffRows = data.cost_breakdown.tariff_levels.map(level => `
-        <tr>
-            <td>${level.level_name}</td>
-            <td style="text-align: right;">${level.kwh_consumed.toFixed(2)} kWh</td>
+    // Generamos las filas de la tabla, detectando cual es la cara (Excedente)
+    const tariffRows = data.cost_breakdown.tariff_levels.map(level => {
+        const isExcedente = level.level_name.includes("Excedente");
+        // Limpiamos asteriscos si vienen del backend (ej: **Excedente**)
+        const cleanName = level.level_name.replace(/\*\*/g, ''); 
+        
+        return `
+        <tr class="${isExcedente ? 'excedente-row' : ''}">
+            <td>${cleanName}</td>
+            <td style="text-align: right;">${level.kwh_consumed.toFixed(2)}</td>
             <td style="text-align: right;">$${level.price_per_kwh.toFixed(2)}</td>
             <td style="text-align: right; font-weight: bold;">$${level.subtotal_mxn.toFixed(2)}</td>
         </tr>
-    `).join('');
+    `}).join('');
 
-    // Generar lista de recomendaciones
-    const recommendationList = data.recommendations.length > 0 
-        ? data.recommendations.map(rec => `<li>${rec.text}</li>`).join('')
-        : '<li>No hay recomendaciones específicas para este periodo. ¡Sigue así!</li>';
+    const alertList = data.alerts && data.alerts.length > 0 
+        ? data.alerts.map(a => `<li class="alert-item"><strong>${a.title}:</strong> ${a.body}</li>`).join('')
+        : '<li>No se detectaron alertas críticas en este periodo.</li>';
 
     const formattedDate = new Date(data.generated_at).toLocaleDateString('es-MX', {
         year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
@@ -102,150 +102,108 @@ const getReportHtml = (data: MonthlyReportData): string => {
         <head>
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
-                body { font-family: Helvetica, Arial, sans-serif; margin: 0; padding: 0; color: #333; background: #fff; }
+                body { font-family: Helvetica, Arial, sans-serif; color: #333; padding: 0; margin: 0; }
                 
-                /* Header Estilo EcoWatt */
-                .header { background-color: #008060; color: white; padding: 25px; text-align: center; border-bottom: 4px solid #00FF7F; }
-                .header h1 { margin: 0; font-size: 26px; text-transform: uppercase; letter-spacing: 1px; }
-                .header p { margin: 5px 0 0 0; font-size: 14px; opacity: 0.9; }
+                /* Header */
+                .header { background-color: #008060; color: white; padding: 30px 20px; text-align: center; border-bottom: 5px solid #00FF7F; }
+                h1 { margin: 0; font-size: 24px; text-transform: uppercase; letter-spacing: 1px; }
                 
-                /* Secciones */
-                .container { padding: 20px; }
-                .section { margin-bottom: 25px; border-bottom: 1px solid #eee; padding-bottom: 15px; }
-                h2 { color: #008060; border-left: 5px solid #00FF7F; padding-left: 10px; margin-top: 0; font-size: 18px; }
+                .container { padding: 25px; }
+                h2 { color: #008060; border-left: 5px solid #00FF7F; padding-left: 10px; margin-top: 25px; font-size: 18px; }
                 
-                /* Grid de Resumen */
-                .summary-grid { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; }
-                .summary-box { width: 48%; background: #f8f9fa; padding: 15px; border-radius: 8px; box-sizing: border-box; border: 1px solid #e9ecef; margin-bottom: 10px; }
-                .summary-label { font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
-                .summary-value { font-size: 20px; font-weight: bold; color: #2c3e50; margin-top: 5px; }
-                .highlight-val { color: #FF6347; } /* Naranja para costos */
-
                 /* Tablas */
-                table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
-                th { background-color: #e9ecef; color: #495057; padding: 8px; text-align: left; font-weight: 600; }
-                td { border-bottom: 1px solid #f1f1f1; padding: 8px; color: #555; }
-                .total-row td { font-weight: bold; background-color: #f8f9fa; border-top: 2px solid #ddd; }
+                table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13px; }
+                th { background-color: #f0f2f5; padding: 12px; text-align: left; border-bottom: 2px solid #ddd; }
+                td { border-bottom: 1px solid #eee; padding: 10px; }
                 
-                /* Impacto Ambiental */
-                .eco-box { background-color: #e6ffed; padding: 15px; border-radius: 8px; border: 1px solid #b2f2bb; }
-                .eco-note { font-style: italic; color: #2b8a3e; margin-top: 5px; font-size: 13px; }
+                /* Estilos de filas especiales */
+                .excedente-row td { background-color: #fff5f5; color: #c53030; font-weight: bold; }
+                .total-row td { font-weight: bold; background-color: #f9f9f9; }
+                
+                /* El Total Final Grande */
+                .total-final { background-color: #d1e7dd; color: #0f5132; font-size: 16px; border-top: 2px solid #008060; }
+                .total-final td { padding: 15px 10px; font-weight: 800; }
 
-                /* Recomendaciones */
-                ul { padding-left: 20px; }
-                li { margin-bottom: 5px; color: #444; }
-
-                .footer { text-align: center; font-size: 10px; color: #999; margin-top: 40px; padding-top: 10px; border-top: 1px solid #eee; }
+                /* Cajas de Resumen */
+                .summary-box { background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+                .big-num { font-size: 28px; font-weight: bold; color: #2c3e50; display: block; margin-top: 5px; }
+                
+                /* Caja de Ahorro (La Venta) */
+                .savings-box { background-color: #e6ffed; border: 1px solid #28a745; padding: 20px; border-radius: 8px; margin-top: 15px; }
+                .savings-amount { color: #dc3545; font-size: 32px; font-weight: bold; display: block; margin: 10px 0; }
+                
+                .alert-item { background-color: #fff3cd; padding: 8px; margin-bottom: 5px; border-radius: 4px; font-size: 12px; list-style: none; }
+                
+                .footer { text-align: center; font-size: 10px; color: #999; margin-top: 50px; border-top: 1px solid #eee; padding-top: 15px; }
             </style>
         </head>
         <body>
             <div class="header">
-                <h1>Reporte Mensual</h1>
-                <p>Periodo: ${data.header.period_month}</p>
-                <p>${data.header.user_name} | ${data.header.user_email}</p>
+                <h1>Estado de Cuenta</h1>
+                <p style="margin: 5px 0; opacity: 0.9;">${data.header.period_month}</p>
+                <p style="font-size: 14px;">${data.header.user_name}</p>
             </div>
 
             <div class="container">
                 
-                <!-- RESUMEN EJECUTIVO -->
-                <div class="section">
-                    <h2>Resumen Ejecutivo</h2>
-                    <div class="summary-grid">
-                        <div class="summary-box">
-                            <div class="summary-label">Consumo Total</div>
-                            <div class="summary-value">${data.executive_summary.total_kwh_consumed.toFixed(2)} kWh</div>
-                        </div>
-                        <div class="summary-box">
-                            <div class="summary-label">Costo Estimado</div>
-                            <div class="summary-value highlight-val">$${data.executive_summary.total_estimated_cost_mxn.toFixed(2)}</div>
-                        </div>
-                        <div class="summary-box">
-                            <div class="summary-label">Huella de Carbono</div>
-                            <div class="summary-value">${data.executive_summary.carbon_footprint_kg.toFixed(2)} kg</div>
-                        </div>
-                        <div class="summary-box">
-                            <div class="summary-label">Árboles Equivalentes</div>
-                            <div class="summary-value">🌳 ${data.executive_summary.equivalent_trees}</div>
-                        </div>
-                    </div>
+                <!-- TOTAL PRINCIPAL -->
+                <div class="summary-box">
+                    <span style="font-size: 12px; text-transform: uppercase; color: #666;">Total Estimado a Pagar</span>
+                    <span class="big-num" style="color: #dc3545;">$${data.executive_summary.total_estimated_cost_mxn.toFixed(2)} MXN</span>
                 </div>
 
-                <!-- DESGLOSE DE COSTOS -->
-                <div class="section">
-                    <h2>Desglose de Costos</h2>
-                    <p style="font-size: 12px; color: #666;">Tarifa: <strong>${data.cost_breakdown.applied_tariff}</strong></p>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Concepto</th>
-                                <th style="text-align: right">Consumo</th>
-                                <th style="text-align: right">Precio</th>
-                                <th style="text-align: right">Subtotal</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${tariffRows}
-                            <tr class="total-row">
-                                <td colspan="3" style="text-align: right">Cargo Fijo</td>
-                                <td style="text-align: right">$${data.cost_breakdown.fixed_charge_mxn.toFixed(2)}</td>
-                            </tr>
-                            <tr class="total-row" style="background-color: #dff0d8;">
-                                <td colspan="3" style="text-align: right; color: #008060;">TOTAL ESTIMADO</td>
-                                <td style="text-align: right; color: #008060;">$${data.cost_breakdown.total_cost_mxn.toFixed(2)}</td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <!-- DESGLOSE (Tabla) -->
+                <h2>Desglose de Costos</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Concepto</th>
+                            <th style="text-align: right">Consumo</th>
+                            <th style="text-align: right">Precio</th>
+                            <th style="text-align: right">Subtotal</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tariffRows}
+                        <tr class="total-row">
+                            <td colspan="3" style="text-align: right;">Cargo Fijo</td>
+                            <td style="text-align: right;">$${data.cost_breakdown.fixed_charge_mxn.toFixed(2)}</td>
+                        </tr>
+                        <tr class="total-final">
+                            <td colspan="3" style="text-align: right;">TOTAL ESTIMADO</td>
+                            <td style="text-align: right;">$${data.cost_breakdown.total_cost_mxn.toFixed(2)}</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <!-- SECCIÓN DE OPORTUNIDAD (Ahorro) -->
+                <h2>Análisis de Ahorro</h2>
+                <div class="savings-box">
+                    <strong style="color: #008060; font-size: 16px;">💰 Oportunidad de Ahorro Detectada</strong>
+                    <span class="savings-amount">$${savings.savingsAmount.toFixed(2)} MXN</span>
+                    <p style="margin: 0; color: #155724;">${savings.note}</p>
                 </div>
 
-                <!-- IMPACTO Y RECOMENDACIONES -->
-                <div class="section">
-                    <h2>Impacto y Ahorro</h2>
-                    <div class="eco-box">
-                        <strong>Análisis Ambiental:</strong>
-                        <p class="eco-note">"${data.environmental_impact.comparison_note}"</p>
-                    </div>
-                    
-                    <h3 style="font-size: 14px; margin-top: 15px; color: #333;">Recomendaciones para ti:</h3>
-                    <ul>
-                        ${recommendationList}
-                    </ul>
+                <!-- ALERTAS -->
+                <h2>Alertas y Avisos</h2>
+                <ul style="padding: 0;">${alertList}</ul>
+
+                <div class="footer">
+                    Generado el ${formattedDate} • EcoWatt App<br>
+                    Documento informativo, no oficial ante CFE.
                 </div>
-
-                <!-- TABLA DIARIA (Opcional, si es muy larga puede ocupar varias páginas) -->
-                <div class="section">
-                    <h2>Historial Diario</h2>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Fecha</th>
-                                <th style="text-align: right">Consumo (kWh)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${dailyRows}
-                        </tbody>
-                    </table>
-                </div>
-
-            </div>
-
-            <div class="footer">
-                Reporte generado automáticamente por EcoWatt el ${formattedDate}.<br>
-                Este documento es informativo y no reemplaza su factura oficial de CFE.
             </div>
         </body>
         </html>
     `;
 };
 
-// --- 3. FUNCIÓN PRINCIPAL: GENERAR PDF ---
-
+// --- 4. FUNCIÓN EXPORTADA ---
 export const generateEcoWattReport = async (reportData: MonthlyReportData) => {
     try {
         const htmlContent = getReportHtml(reportData);
-        // Limpiamos el nombre del periodo para que sea un nombre de archivo válido
         const safePeriodName = reportData.header.period_month.replace(/[^a-zA-Z0-9]/g, '_');
-        const fileName = `EcoWatt_Reporte_${safePeriodName}`;
+        const fileName = `EcoWatt_EstadoCuenta_${safePeriodName}`;
         
         let options = {
             html: htmlContent,
@@ -257,11 +215,10 @@ export const generateEcoWattReport = async (reportData: MonthlyReportData) => {
         const file = await RNHTMLToPDF.convert(options);
         let filePath = file.filePath;
 
-        // Manejo específico para Android (Mover a Descargas para fácil acceso)
+        // Lógica Android para mover a Descargas
         if (Platform.OS === 'android') {
             const destinationPath = `${RNFS.DownloadDirectoryPath}/${fileName}.pdf`;
             
-            // Verificamos si el archivo ya existe para no dar error, o lo sobrescribimos
             if (await RNFS.exists(destinationPath)) {
                 await RNFS.unlink(destinationPath);
             }
