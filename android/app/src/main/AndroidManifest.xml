@@ -2,11 +2,15 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     
+    <!-- 🚨 AGREGADO: Permisos de Almacenamiento (Necesarios para el PDF) -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    
     <!-- Permisos Bluetooth existentes -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     
-    <!-- Permisos de ubicación (requeridos para escanear WiFi) -->
+    <!-- Permisos de ubicación -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     
@@ -31,7 +35,12 @@
       android:allowBackup="false"
       android:theme="@style/AppTheme"
       android:usesCleartextTraffic="true"
+      android:requestLegacyExternalStorage="true" 
       android:supportsRtl="true">
+      <!-- 
+           NOTA: Agregué android:requestLegacyExternalStorage="true" arriba ⬆️ 
+           Esto es vital para que Android 10 permita guardar archivos en Descargas fácilmente.
+      -->
       
       <activity
         android:name=".MainActivity"

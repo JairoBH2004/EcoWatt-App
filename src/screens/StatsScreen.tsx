@@ -3,8 +3,8 @@ import {
     View, Text, ImageBackground, StatusBar,
     ScrollView, ActivityIndicator, Dimensions, AppState,
     TouchableOpacity, Modal, Alert, StyleSheet,
-    PermissionsAndroid, // <--- 1. IMPORTANTE: Importar PermissionsAndroid
-    Platform            // <--- 1. IMPORTANTE: Importar Platform
+    PermissionsAndroid, 
+    Platform 
 } from 'react-native';
 import { BarChart, LineChart, lineDataItem } from 'react-native-gifted-charts';
 import Icon from 'react-native-vector-icons/FontAwesome5';
@@ -28,7 +28,7 @@ type ChartDataItem = {
     label: string;
     frontColor?: string;
     focusable?: boolean;
-    dataPointText?: string;
+    dataPointText?: string; // Aunque lo tengas aquí, el tooltip es mejor
 };
 
 const MAX_REALTIME_POINTS = 30;
@@ -141,12 +141,8 @@ const StatsScreen = () => {
 
             try {
                 const devices = await getDevices(token);
-                console.log('📱 Dispositivos encontrados:', devices); // DEBUG
                 if (devices.length > 0) {
                     setDeviceId(devices[0].dev_id);
-                    console.log('✅ Device ID establecido:', devices[0].dev_id); // DEBUG
-                } else {
-                    console.warn('⚠️ No se encontraron dispositivos');
                 }
             } catch (devErr) {
                 console.error("❌ Error obteniendo dispositivos:", devErr);
@@ -167,8 +163,7 @@ const StatsScreen = () => {
                         value: p.value,
                         label: formatDateLabel(p.timestamp, 'hour'),
                         frontColor: PRIMARY_GREEN,
-                        focusable: true,
-                        dataPointText: `${p.value.toFixed(2)}`
+                        // focusable: true, // Ya no es estrictamente necesario si usamos renderTooltip
                     }));
                     setDailyData(formatted);
                 }
@@ -178,8 +173,6 @@ const StatsScreen = () => {
                         value: p.value, 
                         label: formatDateLabel(p.timestamp, 'weekday'),
                         frontColor: PRIMARY_GREEN,
-                        focusable: true,
-                        dataPointText: `${p.value.toFixed(1)}`
                     }));
                     setWeeklyData(formatted);
                 }
@@ -189,8 +182,6 @@ const StatsScreen = () => {
                         value: p.value, 
                         label: formatDateLabel(p.timestamp, 'dayMonth'),
                         frontColor: PRIMARY_GREEN,
-                        focusable: true,
-                        dataPointText: `${p.value.toFixed(1)}`
                     }));
                     setMonthlyData(formatted);
                 }
@@ -207,80 +198,58 @@ const StatsScreen = () => {
     }, [token, logout]);
 
     // ---------------------------------------------------------
-    // WEBSOCKET - CORREGIDO
+    // WEBSOCKET
     // ---------------------------------------------------------
     useEffect(() => {
         const connectWebSocket = () => {
-            if (!token || !deviceId) {
-                console.log('⏸️ No se puede conectar WebSocket - Token o DeviceId faltante');
-                return;
-            }
+            if (!token || !deviceId) return;
 
             if (ws.current && (ws.current.readyState === WebSocket.CONNECTING || ws.current.readyState === WebSocket.OPEN)) {
-                console.log('🔄 WebSocket ya está conectado o conectando');
                 return;
             }
 
             setWsStatus('connecting');
             const wsUrl = `wss://core-cloud.dev/ws/live/${deviceId}?token=${token}`;
-            console.log('🔌 Conectando WebSocket:', wsUrl);
             
             const socket = new WebSocket(wsUrl);
 
             socket.onopen = () => {
-                console.log('✅ WebSocket conectado exitosamente');
                 setWsStatus('connected');
                 reconnectAttemptsRef.current = 0;
-                
-                // Inicializar con datos de ejemplo para visualización
                 setRealtimeData([{ value: 0 }]);
             };
 
             socket.onmessage = (event) => {
                 try {
                     const message = JSON.parse(event.data);
-                    console.log('📊 Mensaje WebSocket recibido:', message); // DEBUG
-                    
                     if (typeof message.watts === 'number') {
                         const newWatts = message.watts;
                         setCurrentWatts(newWatts);
-                        
-                        // Actualizar máximo del chart dinámicamente
                         setMaxChartValue(prev => Math.max(prev, newWatts * 1.3));
-                        
                         setRealtimeData(prev => {
                             const newData = [...prev, { value: newWatts }];
                             return newData.length > MAX_REALTIME_POINTS
                                 ? newData.slice(newData.length - MAX_REALTIME_POINTS)
                                 : newData;
                         });
-                        
-                        console.log('✅ Datos actualizados:', newWatts, 'W');
                     }
-                } catch (e) { 
-                    console.error('❌ Error parseando mensaje WebSocket:', e); 
-                }
+                } catch (e) { console.error(e); }
             };
 
             socket.onerror = (error) => {
-                console.error('❌ Error WebSocket:', error);
                 setWsStatus('error');
             };
 
             socket.onclose = (event) => {
-                console.log('🔌 WebSocket cerrado. Código:', event.code, 'Razón:', event.reason);
                 ws.current = null;
-                
                 if (event.code !== 1000 && reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
                     reconnectAttemptsRef.current += 1;
                     const delay = 1000 * reconnectAttemptsRef.current;
-                    console.log(`🔄 Reintentando conexión (${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS}) en ${delay}ms`);
                     setWsStatus('connecting');
                     reconnectTimeoutRef.current = setTimeout(connectWebSocket, delay);
                 } else {
-                    console.log('❌ WebSocket desconectado permanentemente');
                     setWsStatus('disconnected');
-                    setRealtimeData([{ value: 0 }]); // Reset a valor base
+                    setRealtimeData([{ value: 0 }]);
                 }
             };
 
@@ -288,30 +257,20 @@ const StatsScreen = () => {
         };
 
         const disconnectWebSocket = () => {
-            if (reconnectTimeoutRef.current) {
-                clearTimeout(reconnectTimeoutRef.current);
-            }
+            if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
             if (ws.current) {
-                console.log('🔌 Desconectando WebSocket manualmente');
                 ws.current.close();
                 ws.current = null;
             }
         };
 
-        if (deviceId && token) {
-            connectWebSocket();
-        } else {
-            console.log('⚠️ Esperando deviceId y token para conectar WebSocket');
-        }
+        if (deviceId && token) connectWebSocket();
 
         const appStateSubscription = AppState.addEventListener('change', nextAppState => {
-            console.log('📱 Estado de la app cambió a:', nextAppState);
             if (nextAppState !== 'active') {
                 disconnectWebSocket(); 
             } else {
-                if (!ws.current && deviceId && token) {
-                   setTimeout(connectWebSocket, 500);
-                }
+                if (!ws.current && deviceId && token) setTimeout(connectWebSocket, 500);
             }
         });
 
@@ -322,13 +281,12 @@ const StatsScreen = () => {
     }, [token, deviceId]); 
 
     // ---------------------------------------------------------
-    // REPORTE PDF (CON LÓGICA DE PERMISOS)
+    // REPORTE PDF (LÓGICA ANDROID 13+)
     // ---------------------------------------------------------
     const handleGenerateReport = async () => {
         if (!token) return;
 
-        // 1. SOLICITUD DE PERMISOS (ANDROID)
-        if (Platform.OS === 'android') {
+        if (Platform.OS === 'android' && Platform.Version < 33) {
             try {
                 const granted = await PermissionsAndroid.request(
                     PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
@@ -341,7 +299,6 @@ const StatsScreen = () => {
                     }
                 );
                 
-                // Si el permiso no fue concedido, detenemos el proceso
                 if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
                     Alert.alert("Permiso Denegado", "No podemos guardar el reporte sin permiso de almacenamiento.");
                     return; 
@@ -377,6 +334,28 @@ const StatsScreen = () => {
     const chartContainerWidth = screenWidth - 70; 
     const stableSpacing = chartContainerWidth / MAX_REALTIME_POINTS;
 
+    // --- RENDER TOOLTIP COMPONENT ---
+    // Este pequeño componente muestra el valor al hacer click
+    const renderTooltip = (item: any) => {
+        return (
+            <View style={{
+                marginBottom: 5,
+                marginLeft: -15,
+                backgroundColor: '#222',
+                paddingHorizontal: 8,
+                paddingVertical: 4,
+                borderRadius: 4,
+                borderWidth: 1,
+                borderColor: PRIMARY_GREEN,
+                zIndex: 1000
+            }}>
+                <Text style={{color: 'white', fontSize: 12, fontWeight: 'bold', textAlign: 'center'}}>
+                    {item.value.toFixed(2)}
+                </Text>
+            </View>
+        );
+    };
+
     const DatePickerModal = ({ visible, onClose, options, selectedDate, onSelect, formatLabel }: any) => (
         <Modal visible={visible} transparent={true} animationType="slide" onRequestClose={onClose}>
             <View style={statsStyles.modalBackground}>
@@ -403,7 +382,6 @@ const StatsScreen = () => {
         </Modal>
     );
 
-    // CALCULAR SI HAY DATOS REALES
     const hasRealtimeData = realtimeData.length > 1 || (realtimeData.length === 1 && (realtimeData[0]?.value ?? 0) > 0);
 
     return (
@@ -484,7 +462,20 @@ const StatsScreen = () => {
                     
                     {isLoadingHistory ? <ActivityIndicator color={PRIMARY_GREEN} style={{marginVertical: 20}} /> : (
                         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                            <BarChart data={dailyData} barWidth={20} spacing={15} rulesColor="rgba(255,255,255,0.1)" yAxisTextStyle={{color:'#ccc'}} xAxisLabelTextStyle={{color:'white'}} xAxisThickness={0} yAxisThickness={0} maxValue={calcMax(dailyData)} noOfSections={3} isAnimated />
+                            <BarChart 
+                                data={dailyData} 
+                                barWidth={20} 
+                                spacing={15} 
+                                rulesColor="rgba(255,255,255,0.1)" 
+                                yAxisTextStyle={{color:'#ccc'}} 
+                                xAxisLabelTextStyle={{color:'white'}} 
+                                xAxisThickness={0} 
+                                yAxisThickness={0} 
+                                maxValue={calcMax(dailyData)} 
+                                noOfSections={3} 
+                                isAnimated
+                                renderTooltip={renderTooltip} // <--- ¡AQUÍ ESTÁ LA MAGIA!
+                            />
                         </ScrollView>
                     )}
                 </View>
@@ -501,7 +492,20 @@ const StatsScreen = () => {
 
                     {isLoadingHistory ? <ActivityIndicator color={PRIMARY_GREEN} style={{marginVertical: 20}} /> : (
                         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                            <BarChart data={weeklyData} barWidth={30} spacing={20} rulesColor="rgba(255,255,255,0.1)" yAxisTextStyle={{color:'#ccc'}} xAxisLabelTextStyle={{color:'white'}} xAxisThickness={0} yAxisThickness={0} maxValue={calcMax(weeklyData)} noOfSections={3} isAnimated />
+                            <BarChart 
+                                data={weeklyData} 
+                                barWidth={30} 
+                                spacing={20} 
+                                rulesColor="rgba(255,255,255,0.1)" 
+                                yAxisTextStyle={{color:'#ccc'}} 
+                                xAxisLabelTextStyle={{color:'white'}} 
+                                xAxisThickness={0} 
+                                yAxisThickness={0} 
+                                maxValue={calcMax(weeklyData)} 
+                                noOfSections={3} 
+                                isAnimated
+                                renderTooltip={renderTooltip} // <--- ¡AQUÍ TAMBIÉN!
+                            />
                         </ScrollView>
                     )}
                 </View>
@@ -521,7 +525,6 @@ const StatsScreen = () => {
                             ) : (
                                 <>
                                     <Icon name="file-pdf" size={12} color="#fff" style={{marginRight: 5}} />
-                                    {/* AQUÍ ESTÁ EL CAMBIO: DE "PDF" A "GENERAR REPORTE" */}
                                     <Text style={localStyles.reportButtonText}>GENERAR REPORTE</Text>
                                 </>
                             )}
@@ -537,7 +540,20 @@ const StatsScreen = () => {
 
                     {isLoadingHistory ? <ActivityIndicator color={PRIMARY_GREEN} style={{marginVertical: 20}} /> : (
                         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                            <BarChart data={monthlyData} barWidth={30} spacing={20} rulesColor="rgba(255,255,255,0.1)" yAxisTextStyle={{color:'#ccc'}} xAxisLabelTextStyle={{color:'white'}} xAxisThickness={0} yAxisThickness={0} maxValue={calcMax(monthlyData)} noOfSections={3} isAnimated />
+                            <BarChart 
+                                data={monthlyData} 
+                                barWidth={30} 
+                                spacing={20} 
+                                rulesColor="rgba(255,255,255,0.1)" 
+                                yAxisTextStyle={{color:'#ccc'}} 
+                                xAxisLabelTextStyle={{color:'white'}} 
+                                xAxisThickness={0} 
+                                yAxisThickness={0} 
+                                maxValue={calcMax(monthlyData)} 
+                                noOfSections={3} 
+                                isAnimated
+                                renderTooltip={renderTooltip} // <--- Y AQUÍ TAMBIÉN!
+                            />
                         </ScrollView>
                     )}
                 </View>
@@ -620,7 +636,6 @@ const localStyles = StyleSheet.create({
         fontSize: 12,
         fontWeight: 'bold',
     },
-    // NUEVOS ESTILOS PARA MENSAJES
     noDataContainer: {
         alignItems: 'center',
         justifyContent: 'center',

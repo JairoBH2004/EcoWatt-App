@@ -1,5 +1,10 @@
-// --- HELPER PARA MANEJAR ERRORES DE FORMA CENTRALIZADA ---
-// Esta función evita repetir la misma lógica de errores en todas las llamadas a la API.
+// src/services/authService.ts
+
+const API_BASE_URL = 'https://core-cloud.dev';
+
+// ========================================
+// HELPER PARA MANEJAR ERRORES
+// ========================================
 const handleApiError = async (response: Response) => {
   const data = await response.json();
   let errorMessage = 'Ocurrió un error inesperado.';
@@ -14,11 +19,10 @@ const handleApiError = async (response: Response) => {
   throw new Error(errorMessage);
 };
 
+// ========================================
+// INTERFACES
+// ========================================
 
-// --- CÓDIGO DEL SERVICIO ---
-const API_BASE_URL = 'https://core-cloud.dev';
-
-// --- INTERFACES ---
 interface UserRegistrationData {
   user_name: string;
   user_email: string;
@@ -26,14 +30,17 @@ interface UserRegistrationData {
   user_trf_rate: string;
   user_billing_day: number;
 }
+
 interface LoginCredentials {
   user_email: string;
   user_password: string;
 }
+
 interface LoginResponse {
   access_token: string;
   refresh_token: string;
 }
+
 export interface UserProfile {
   user_id: number;
   user_name: string;
@@ -41,10 +48,23 @@ export interface UserProfile {
   user_trf_rate: string;
   user_billing_day: number;
 }
+
+interface UpdateUserData {
+  user_name?: string;
+  user_email?: string;
+  user_billing_day?: number;
+}
+
+interface ResetPasswordData {
+  token: string;
+  new_password: string;
+}
+
 interface CarbonFootprint {
   co2_emitted_kg: number;
   equivalent_trees_absorption_per_year: number;
 }
+
 export interface DashboardSummary {
   kwh_consumed_cycle: number;
   estimated_cost_mxn: number;
@@ -55,6 +75,7 @@ export interface DashboardSummary {
   carbon_footprint: CarbonFootprint;
   latest_recommendation: string;
 }
+
 export interface Device {
   dev_id: number;
   dev_user_id: number;
@@ -64,44 +85,33 @@ export interface Device {
   dev_brand: string;
   dev_model: string;
 }
-export interface HistoryDataPoint {
-  timestamp: string;
-  value: number;
-}
-// Interfaz ajustada: period es opcional
-export interface HistoryGraphResponse {
-  period?: string; // Puede que last7days no lo devuelva
-  unit: string;
-  data_points: HistoryDataPoint[];
-}
+
 interface DeviceRegistrationData {
   name: string;
   mac: string;
 }
 
-// Interfaz para actualizar usuario (campos opcionales)
-interface UpdateUserData {
-    user_name?: string;
-    user_email?: string;
-    user_billing_day?: number;
-    // user_trf_rate?: string; // Omitido porque no será editable
+export interface HistoryDataPoint {
+  timestamp: string;
+  value: number;
 }
 
-// --- 👇 NUEVA INTERFAZ PARA RESET PASSWORD 👇 ---
-interface ResetPasswordData {
-    token: string;
-    new_password: string;
+export interface HistoryGraphResponse {
+  period?: string;
+  unit: string;
+  data_points: HistoryDataPoint[];
 }
-// --- 👆 FIN DE NUEVA INTERFAZ 👆 ---
 
-// --- 👇 NUEVA INTERFAZ PARA EL TOKEN FCM (NOTIFICACIONES) 👇 ---
-interface FcmTokenData {
-    dev_fcm_token: string;
+interface FcmRegistrationData {
+  fcm_token: string;
+  device_name?: string;
+  platform?: string;
 }
-// --- 👆 FIN DE NUEVA INTERFAZ 👆 ---
 
+// ========================================
+// AUTENTICACIÓN Y USUARIO
+// ========================================
 
-// --- FUNCIONES DE AUTENTICACIÓN Y USUARIO ---
 export const registerUser = async (userData: UserRegistrationData) => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/v1/users/`, {
@@ -161,27 +171,22 @@ export const requestPasswordReset = async (email: string): Promise<void> => {
   }
 };
 
-// --- 👇 NUEVA FUNCIÓN PARA RESET PASSWORD 👇 ---
 export const resetPassword = async (resetData: ResetPasswordData): Promise<void> => {
-    try {
-        const response = await fetch(`${API_BASE_URL}/api/v1/auth/reset-password`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(resetData),
-        });
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(resetData),
+    });
 
-        // Este endpoint también puede devolver 200 OK incluso si el token es inválido
-        // o ya fue usado, para no dar pistas. Manejamos errores >= 400.
-        if (!response.ok && response.status >= 400) {
-            await handleApiError(response); // Reutilizamos el manejador de errores
-        }
-        // No esperamos un body en la respuesta exitosa
-    } catch (error) {
-        if (error instanceof Error) throw error;
-        throw new Error('Error desconocido al restablecer la contraseña.');
+    if (!response.ok && response.status >= 400) {
+      await handleApiError(response);
     }
+  } catch (error) {
+    if (error instanceof Error) throw error;
+    throw new Error('Error desconocido al restablecer la contraseña.');
+  }
 };
-// --- 👆 FIN DE NUEVA FUNCIÓN 👆 ---
 
 export const getUserProfile = async (token: string): Promise<UserProfile> => {
   try {
@@ -198,32 +203,34 @@ export const getUserProfile = async (token: string): Promise<UserProfile> => {
 };
 
 export const updateUserProfile = async (token: string, userData: UpdateUserData): Promise<UserProfile> => {
-    try {
-        // Filtramos para enviar solo los campos definidos
-        const body = JSON.stringify(Object.fromEntries(
-            Object.entries(userData).filter(([_, v]) => v !== undefined)
-        ));
+  try {
+    const body = JSON.stringify(Object.fromEntries(
+      Object.entries(userData).filter(([_, v]) => v !== undefined)
+    ));
 
-        const response = await fetch(`${API_BASE_URL}/api/v1/users/me`, {
-            method: 'PATCH',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
-            },
-            body: body,
-        });
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/me`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: body,
+    });
 
-        if (!response.ok) {
-            await handleApiError(response);
-        }
-        return await response.json(); // Devuelve el perfil actualizado
-    } catch (error) {
-        if (error instanceof Error) throw error;
-        throw new Error('Error desconocido al actualizar el perfil.');
+    if (!response.ok) {
+      await handleApiError(response);
     }
+    return await response.json();
+  } catch (error) {
+    if (error instanceof Error) throw error;
+    throw new Error('Error desconocido al actualizar el perfil.');
+  }
 };
 
-// --- FUNCIONES DEL DASHBOARD ---
+// ========================================
+// DASHBOARD
+// ========================================
+
 export const getDashboardSummary = async (token: string): Promise<DashboardSummary> => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/v1/dashboard/summary`, {
@@ -238,7 +245,10 @@ export const getDashboardSummary = async (token: string): Promise<DashboardSumma
   }
 };
 
-// --- FUNCIONES DE HISTORIAL ---
+// ========================================
+// HISTORIAL
+// ========================================
+
 export const getHistoryGraph = async (
   token: string,
   period: 'daily' | 'weekly' | 'monthly'
@@ -270,7 +280,13 @@ export const getLast7DaysHistory = async (token: string): Promise<HistoryGraphRe
   }
 };
 
-// --- FUNCIONES DE DISPOSITIVOS ---
+// ========================================
+// DISPOSITIVOS
+// ========================================
+
+/**
+ * Obtiene todos los dispositivos del usuario
+ */
 export const getDevices = async (token: string): Promise<Device[]> => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/v1/devices/`, {
@@ -285,11 +301,13 @@ export const getDevices = async (token: string): Promise<Device[]> => {
   }
 };
 
-export const registerDevice = async (token: string, deviceData: DeviceRegistrationData): Promise<Device> => {
-  const body = JSON.stringify({
-    dev_hardware_id: deviceData.mac,
-    dev_name: deviceData.name,
-  });
+/**
+ * Registra un nuevo dispositivo Shelly
+ */
+export const registerDevice = async (
+  token: string, 
+  deviceData: DeviceRegistrationData
+): Promise<Device> => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/v1/devices/`, {
       method: 'POST',
@@ -297,9 +315,23 @@ export const registerDevice = async (token: string, deviceData: DeviceRegistrati
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
       },
-      body: body,
+      body: JSON.stringify({
+        dev_hardware_id: deviceData.mac.toUpperCase(),
+        dev_name: deviceData.name,
+      }),
     });
-    if (!response.ok) await handleApiError(response);
+
+    if (!response.ok) {
+      // Manejo específico de errores HTTP
+      if (response.status === 409) {
+        throw new Error('Este dispositivo ya está registrado en tu cuenta');
+      }
+      if (response.status === 422) {
+        throw new Error('MAC inválida o datos incorrectos');
+      }
+      await handleApiError(response);
+    }
+
     return await response.json();
   } catch (error) {
     if (error instanceof Error) throw error;
@@ -307,33 +339,88 @@ export const registerDevice = async (token: string, deviceData: DeviceRegistrati
   }
 };
 
-// --- 👇 FUNCIÓN AÑADIDA PARA NOTIFICACIONES ---
 /**
- * Registra el token FCM (Firebase Cloud Messaging) de un dispositivo específico 
- * en el backend para que pueda recibir notificaciones push.
+ * Actualiza el nombre de un dispositivo
  */
-export const registerFcmToken = async (token: string, deviceId: number, fcmToken: string): Promise<void> => {
-    try {
-        const body: FcmTokenData = {
-            dev_fcm_token: fcmToken
-        };
-        
-        const response = await fetch(`${API_BASE_URL}/api/v1/devices/${deviceId}/register-fcm`, {
-            method: 'PATCH',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
-            },
-            body: JSON.stringify(body),
-        });
+export const updateDevice = async (
+  token: string,
+  deviceId: number,
+  newName: string
+): Promise<Device> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/devices/${deviceId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ dev_name: newName }),
+    });
 
-        if (!response.ok) {
-            await handleApiError(response);
-        }
-        // Un 200 OK sin cuerpo es éxito
-    } catch (error) { 
-        if (error instanceof Error) throw error;
-        throw new Error('Error desconocido al registrar el token FCM.');
+    if (!response.ok) {
+      await handleApiError(response);
     }
+
+    return await response.json();
+  } catch (error) {
+    if (error instanceof Error) throw error;
+    throw new Error('Error desconocido al actualizar dispositivo.');
+  }
 };
-// --- 👆 FIN DE FUNCIÓN AÑADIDA 👆 --- 
+
+/**
+ * Elimina un dispositivo
+ */
+export const deleteDevice = async (token: string, deviceId: number): Promise<void> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/devices/${deviceId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      await handleApiError(response);
+    }
+  } catch (error) {
+    if (error instanceof Error) throw error;
+    throw new Error('Error desconocido al eliminar dispositivo.');
+  }
+};
+
+// ========================================
+// NOTIFICACIONES FCM
+// ========================================
+
+/**
+ * Registra el token FCM para recibir notificaciones push
+ * ✅ ENDPOINT CORRECTO según documentación: POST /api/v1/fcm/register
+ */
+export const registerFcmToken = async (
+  token: string,
+  fcmData: FcmRegistrationData
+): Promise<void> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/fcm/register`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        fcm_token: fcmData.fcm_token,
+        device_name: fcmData.device_name || null,
+        platform: fcmData.platform || null,
+      }),
+    });
+
+    if (!response.ok) {
+      await handleApiError(response);
+    }
+    // Respuesta exitosa (200) retorna null según documentación
+  } catch (error) {
+    if (error instanceof Error) throw error;
+    throw new Error('Error desconocido al registrar el token FCM.');
+  }
+};

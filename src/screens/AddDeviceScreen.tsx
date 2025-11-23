@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, ActivityIndicator, TouchableOpacity, SafeAreaView,
-  PermissionsAndroid, Platform, FlatList,
-  Modal, TextInput, Alert
+  PermissionsAndroid, Platform, FlatList, Modal, TextInput, Alert
 } from 'react-native';
 import Icon from 'react-native-vector-icons/FontAwesome5';
 import WifiManager from 'react-native-wifi-reborn';
@@ -12,7 +11,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { registerDevice, getDevices } from '../services/authService';
 
 type AddDeviceScreenProps = {
-  navigation: { goBack: () => void; };
+  navigation: { goBack: () => void };
 };
 
 type ShellyNetwork = {
@@ -55,7 +54,7 @@ const AddDeviceScreen = ({ navigation }: AddDeviceScreenProps) => {
 
   const initializeSetup = async () => {
     if (!token) {
-      setError('Faltan datos de sesión.');
+      setError('Falta token de sesión. Por favor inicia sesión nuevamente.');
       setCurrentStep('error');
       return;
     }
@@ -76,12 +75,13 @@ const AddDeviceScreen = ({ navigation }: AddDeviceScreenProps) => {
   const loadRegisteredDevices = async () => {
     try {
       const existingDevices = await getDevices(token!);
-      const macs = new Set(existingDevices.map(d => d.dev_hardware_id.toUpperCase()));
+      const macs = new Set(
+        existingDevices.map(d => d.dev_hardware_id.toUpperCase())
+      );
       setRegisteredMacs(macs);
+      console.log(`📋 Dispositivos registrados: ${macs.size}`);
     } catch (err: any) {
-      if (!err.message.includes('404')) {
-        console.warn('Error cargando dispositivos:', err);
-      }
+      console.warn('⚠️ Error cargando dispositivos:', err.message);
       setRegisteredMacs(new Set());
     }
   };
@@ -89,24 +89,24 @@ const AddDeviceScreen = ({ navigation }: AddDeviceScreenProps) => {
   const requestWifiPermissions = async () => {
     if (Platform.OS !== 'android') {
       setHasPermissions(true);
+      await scanForShellyNetworks();
       return;
     }
 
     setCurrentStep('requestingPermissions');
-    setLoadingMessage('Solicitando permisos...');
+    setLoadingMessage('Solicitando permisos de WiFi y ubicación...');
 
     try {
       const apiLevel = Platform.Version as number;
-      let permissions: Array<typeof PermissionsAndroid.PERMISSIONS[keyof typeof PermissionsAndroid.PERMISSIONS]> = [
+      let permissions: any[] = [
         PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
       ];
 
       if (apiLevel >= 33) {
-        // Para Android 13+, necesitamos NEARBY_WIFI_DEVICES
         permissions.push('android.permission.NEARBY_WIFI_DEVICES' as any);
       }
 
-      const granted = await PermissionsAndroid.requestMultiple(permissions as any);
+      const granted = await PermissionsAndroid.requestMultiple(permissions);
       
       const allGranted = Object.values(granted).every(
         permission => permission === PermissionsAndroid.RESULTS.GRANTED
@@ -115,22 +115,24 @@ const AddDeviceScreen = ({ navigation }: AddDeviceScreenProps) => {
       if (allGranted) {
         console.log('✅ Permisos concedidos');
         setHasPermissions(true);
-        // Después de obtener permisos, iniciar escaneo automáticamente
         await scanForShellyNetworks();
       } else {
-        setError('Se requieren permisos de ubicación y WiFi para escanear redes.');
+        setError(
+          'Se requieren permisos de ubicación y WiFi para escanear redes cercanas.\n\n' +
+          'Por favor, habilítalos en la configuración de la app.'
+        );
         setCurrentStep('error');
       }
     } catch (err: any) {
-      console.error('Error solicitando permisos:', err);
+      console.error('❌ Error solicitando permisos:', err);
       setError('Error al solicitar permisos: ' + err.message);
       setCurrentStep('error');
     }
   };
 
   const scanForShellyNetworks = async () => {
-    if (!hasPermissions) {
-      Alert.alert('Error', 'Se requieren permisos de ubicación y WiFi');
+    if (!hasPermissions && Platform.OS === 'android') {
+      Alert.alert('Error', 'Se requieren permisos de WiFi');
       return;
     }
 
@@ -146,7 +148,7 @@ const AddDeviceScreen = ({ navigation }: AddDeviceScreenProps) => {
 
       // Escanear redes WiFi disponibles
       const wifiList = await WifiManager.loadWifiList();
-      console.log(`📡 Total de redes encontradas: ${wifiList.length}`);
+      console.log(`🔡 Total de redes encontradas: ${wifiList.length}`);
 
       // Filtrar solo las redes Shelly
       const shellyNetworks = wifiList.filter((wifi: any) => {
@@ -180,10 +182,33 @@ const AddDeviceScreen = ({ navigation }: AddDeviceScreenProps) => {
     }
   };
 
+  /**
+   * Extrae la MAC del SSID del Shelly
+   * Ejemplo: "shellyplus1pm-A1B2C3D4E5F6" -> "A1B2C3D4E5F6"
+   */
+  const extractMacFromSSID = (ssid: string): string | null => {
+    const macMatch = ssid.match(/[A-Fa-f0-9]{12}$/);
+    return macMatch ? macMatch[0].toUpperCase() : null;
+  };
+
   const handleDeviceSelection = async (device: ShellyNetwork) => {
+    // Extraer MAC del SSID
+    const deviceMac = extractMacFromSSID(device.SSID);
+
+    // Validar si ya está registrado
+    if (deviceMac && registeredMacs.has(deviceMac)) {
+      Alert.alert(
+        'Dispositivo Ya Registrado',
+        `Este Shelly ya está en tu cuenta.\n\nMAC: ${deviceMac}`,
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     Alert.alert(
       'Conectar a Shelly',
-      `¿Deseas conectarte a "${device.SSID}"?\n\nLa app se conectará temporalmente a este dispositivo para configurarlo.`,
+      `¿Deseas conectarte a "${device.SSID}"?\n\n` +
+      `La app se conectará temporalmente a este dispositivo para configurarlo con tu WiFi.`,
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -192,6 +217,35 @@ const AddDeviceScreen = ({ navigation }: AddDeviceScreenProps) => {
         }
       ]
     );
+  };
+
+  /**
+   * Verifica la conexión WiFi actual
+   */
+  const verifyConnection = async (
+    targetSSID: string, 
+    maxAttempts = 10
+  ): Promise<boolean> => {
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        const currentSSID = await WifiManager.getCurrentWifiSSID();
+        console.log(`🔍 Intento ${i + 1}: SSID actual = ${currentSSID}`);
+        
+        if (currentSSID === targetSSID) {
+          console.log('✅ Conexión verificada');
+          return true;
+        }
+        
+        // Esperar 1 segundo antes del próximo intento
+        await new Promise<void>((resolve) => {
+          setTimeout(() => resolve(), 1000);
+        });
+      } catch (error) {
+        console.warn('⚠️ Error verificando SSID:', error);
+      }
+    }
+    
+    return false;
   };
 
   const connectToShelly = async (device: ShellyNetwork) => {
@@ -210,57 +264,72 @@ const AddDeviceScreen = ({ navigation }: AddDeviceScreenProps) => {
         false  // No es WEP
       );
 
-      // Esperar a que se establezca la conexión
-      setTimeout(async () => {
-        try {
-          const currentSSID = await WifiManager.getCurrentWifiSSID();
-          console.log('📱 SSID actual:', currentSSID);
-          
-          if (currentSSID === device.SSID) {
-            console.log('✅ Conectado exitosamente al Shelly');
-            await configureShelly();
-          } else {
-            throw new Error('No se pudo conectar al dispositivo');
-          }
-        } catch (err: any) {
-          setError('Error verificando conexión: ' + err.message);
-          setCurrentStep('error');
-        }
-      }, 5000); // Esperar 5 segundos para que se estabilice la conexión
+      // Verificar que la conexión se estableció
+      const connected = await verifyConnection(device.SSID);
+      
+      if (connected) {
+        console.log('✅ Conectado exitosamente al Shelly');
+        await configureShelly();
+      } else {
+        throw new Error('No se pudo establecer conexión con el dispositivo');
+      }
 
     } catch (error: any) {
       console.error('❌ Error conectando:', error);
-      setError('No se pudo conectar al Shelly: ' + error.message);
+      setError(
+        'No se pudo conectar al Shelly.\n\n' +
+        'Asegúrate de que:\n' +
+        '• El dispositivo esté en modo AP (LED parpadeando)\n' +
+        '• Estés cerca del Shelly\n' +
+        '• El WiFi de tu teléfono esté activado'
+      );
       setCurrentStep('error');
     }
   };
 
   const configureShelly = async () => {
     setCurrentStep('configuring');
-    setLoadingMessage('Configurando WiFi del Shelly...');
+    setLoadingMessage('Obteniendo información del Shelly...');
 
     try {
       console.log('⚙️ Configurando Shelly con WiFi:', wifiSsid);
 
       // La IP por defecto del Shelly en modo AP es 192.168.33.1
       const shellyIP = '192.168.33.1';
+      const timeout = 10000; // 10 segundos
       
-      // Primero obtener info del dispositivo
+      // 1. Obtener info del dispositivo
       console.log('📡 Obteniendo información del dispositivo...');
+      const infoController = new AbortController();
+      const infoTimeoutId = setTimeout(() => infoController.abort(), timeout);
+
       const infoResponse = await fetch(`http://${shellyIP}/rpc/Shelly.GetDeviceInfo`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
+        signal: infoController.signal,
       });
+      clearTimeout(infoTimeoutId);
 
       if (!infoResponse.ok) {
         throw new Error('No se pudo comunicar con el Shelly');
       }
 
       const deviceInfo = await infoResponse.json();
-      console.log('📋 Info del dispositivo:', deviceInfo);
+      console.log('📋 Info del dispositivo:', {
+        id: deviceInfo.id,
+        name: deviceInfo.name,
+        mac: deviceInfo.mac,
+        model: deviceInfo.model,
+        fw_id: deviceInfo.fw_id,
+      });
 
-      // Configurar el WiFi del Shelly
-      console.log('📡 Enviando configuración WiFi...');
+      // 2. Configurar el WiFi del Shelly
+      setLoadingMessage('Configurando WiFi del Shelly...');
+      console.log('🔧 Enviando configuración WiFi...');
+      
+      const configController = new AbortController();
+      const configTimeoutId = setTimeout(() => configController.abort(), timeout);
+
       const configResponse = await fetch(`http://${shellyIP}/rpc/WiFi.SetConfig`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -272,80 +341,124 @@ const AddDeviceScreen = ({ navigation }: AddDeviceScreenProps) => {
               enable: true,
             }
           }
-        })
+        }),
+        signal: configController.signal,
       });
+      clearTimeout(configTimeoutId);
 
       if (!configResponse.ok) {
-        throw new Error('Error al configurar WiFi');
+        throw new Error('Error al configurar WiFi del Shelly');
       }
 
       const configResult = await configResponse.json();
-      console.log('✅ Configuración enviada:', configResult);
+      console.log('✅ Configuración aplicada:', configResult);
 
-      // Reconectar a la red del usuario
+      // 3. Reiniciar el Shelly si es necesario
+      if (configResult.restart_required) {
+        setLoadingMessage('Reiniciando Shelly...');
+        console.log('🔄 Reiniciando Shelly para aplicar cambios...');
+        
+        try {
+          await fetch(`http://${shellyIP}/rpc/Shelly.Reboot`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+        } catch (rebootError) {
+          // El reboot puede causar que la conexión se pierda, es normal
+          console.log('⚠️ Reboot iniciado (conexión perdida es esperado)');
+        }
+      }
+
+      // 4. Reconectar a la red del usuario
       setLoadingMessage('Volviendo a tu red WiFi...');
       await reconnectToUserNetwork();
 
-      // Esperar a que el Shelly se conecte a la red del usuario
+      // 5. Esperar a que el Shelly se conecte a la red del usuario
       setLoadingMessage('Esperando a que el Shelly se conecte a tu red...');
+      console.log('⏳ Esperando 20 segundos para que el Shelly se conecte...');
       
-      setTimeout(async () => {
-        await registerShellyDevice(deviceInfo);
-      }, 15000); // Esperar 15 segundos
+      await new Promise<void>((resolve) => {
+        setTimeout(() => resolve(), 20000);
+      });
+
+      // 6. Registrar dispositivo en el backend
+      await registerShellyDevice(deviceInfo);
 
     } catch (error: any) {
       console.error('❌ Error configurando Shelly:', error);
-      setError('Error al configurar el Shelly: ' + error.message);
-      setCurrentStep('error');
       
-      // Intentar volver a la red del usuario
+      if (error.name === 'AbortError') {
+        setError('Timeout: El Shelly no respondió a tiempo.\n\nIntenta de nuevo más cerca del dispositivo.');
+      } else {
+        setError('Error al configurar el Shelly: ' + error.message);
+      }
+      
+      setCurrentStep('error');
       await reconnectToUserNetwork();
     }
   };
 
   const reconnectToUserNetwork = async () => {
     try {
-      if (userNetworkSSID) {
+      if (userNetworkSSID && wifiPassword) {
         console.log('🔄 Reconectando a red del usuario:', userNetworkSSID);
+        
         await WifiManager.connectToProtectedSSID(
           userNetworkSSID,
-          wifiPassword!,
+          wifiPassword,
           false,
           false
         );
-        console.log('✅ Reconectado a red del usuario');
+        
+        // Verificar reconexión
+        const reconnected = await verifyConnection(userNetworkSSID, 5);
+        
+        if (reconnected) {
+          console.log('✅ Reconectado a red del usuario');
+        } else {
+          console.warn('⚠️ No se pudo verificar reconexión automática');
+        }
       }
     } catch (err) {
       console.warn('⚠️ No se pudo reconectar automáticamente a tu red:', err);
+      Alert.alert(
+        'Reconectar Manualmente',
+        `Por favor, reconéctate manualmente a tu red WiFi: ${userNetworkSSID}`
+      );
     }
   };
 
   const registerShellyDevice = async (deviceInfo: any) => {
     try {
-      setLoadingMessage('Registrando dispositivo...');
+      setLoadingMessage('Registrando dispositivo en EcoWatt...');
       console.log('💾 Registrando dispositivo con MAC:', deviceInfo.mac);
 
       if (!token) {
         throw new Error('Usuario no autenticado');
       }
 
-      await registerDevice(token, {
+      // Registrar en el backend
+      const registeredDevice = await registerDevice(token, {
         name: deviceInfo.name || deviceInfo.id || 'Shelly',
         mac: deviceInfo.mac
       });
 
-      console.log('✅ Dispositivo registrado exitosamente');
+      console.log('✅ Dispositivo registrado exitosamente:', registeredDevice);
       setCurrentStep('success');
+
     } catch (error: any) {
       console.error('❌ Error registrando dispositivo:', error);
-      setError('No se pudo registrar el dispositivo: ' + error.message);
+      setError(
+        'El Shelly se configuró correctamente pero hubo un error al registrarlo en EcoWatt.\n\n' +
+        error.message
+      );
       setCurrentStep('error');
     }
   };
 
   const handleSaveWifi = () => {
     if (!tempSsid || !tempPass) {
-      Alert.alert('Error', 'Ambos campos son obligatorios.');
+      Alert.alert('Campos Incompletos', 'Por favor ingresa el nombre y contraseña de tu red WiFi.');
       return;
     }
     setWifiCredentials(tempSsid, tempPass);
@@ -361,9 +474,10 @@ const AddDeviceScreen = ({ navigation }: AddDeviceScreenProps) => {
     >
       <View style={styles.modalBackground}>
         <View style={styles.modalContainer}>
+          <Icon name="wifi" size={50} color="#00FF7F" style={{marginBottom: 20}} />
           <Text style={styles.modalTitle}>Configurar WiFi</Text>
           <Text style={styles.modalSubtitle}>
-            Ingresa los datos de tu red WiFi para que el dispositivo se conecte.
+            Ingresa los datos de tu red WiFi para que los dispositivos Shelly se conecten.
           </Text>
           
           <TextInput
@@ -372,6 +486,8 @@ const AddDeviceScreen = ({ navigation }: AddDeviceScreenProps) => {
             value={tempSsid}
             onChangeText={setTempSsid}
             placeholderTextColor="#888"
+            autoCapitalize="none"
+            autoCorrect={false}
           />
           <TextInput
             style={styles.modalInput}
@@ -380,6 +496,8 @@ const AddDeviceScreen = ({ navigation }: AddDeviceScreenProps) => {
             onChangeText={setTempPass}
             secureTextEntry
             placeholderTextColor="#888"
+            autoCapitalize="none"
+            autoCorrect={false}
           />
           
           <TouchableOpacity style={styles.modalSaveButton} onPress={handleSaveWifi}>
@@ -407,44 +525,74 @@ const AddDeviceScreen = ({ navigation }: AddDeviceScreenProps) => {
           <View style={styles.centered}>
             <ActivityIndicator size="large" color="#00FF7F" />
             <Text style={styles.loadingText}>{loadingMessage}</Text>
+            {currentStep === 'configuring' && (
+              <Text style={[styles.loadingText, {fontSize: 14, marginTop: 10, color: '#888'}]}>
+                Esto puede tardar hasta 30 segundos...
+              </Text>
+            )}
           </View>
         );
       
       case 'deviceList':
         return (
           <SafeAreaView style={{flex: 1, width: '100%'}}>
+            <View style={{alignItems: 'center', marginTop: 20, marginBottom: 10}}>
+              <Icon name="broadcast-tower" size={40} color="#00FF7F" />
+            </View>
             <Text style={styles.listTitle}>Dispositivos Shelly Encontrados</Text>
+            <Text style={[styles.modalSubtitle, {marginBottom: 20, paddingHorizontal: 20}]}>
+              Toca un dispositivo para configurarlo
+            </Text>
+            
             <FlatList
               data={foundDevices}
               keyExtractor={(item) => item.BSSID}
-              renderItem={({ item }) => (
-                <TouchableOpacity 
-                  style={styles.deviceItem} 
-                  onPress={() => handleDeviceSelection(item)}
-                >
-                  <Icon name="wifi" size={24} color="#00FF7F" />
-                  <View style={styles.deviceInfo}>
-                    <Text style={styles.deviceName}>{item.SSID}</Text>
-                    <Text style={styles.deviceId}>Señal: {item.level} dBm</Text>
-                  </View>
-                  <Icon name="chevron-right" size={16} color="#00FF7F" />
-                </TouchableOpacity>
-              )}
-              ListEmptyComponent={
-                <View style={styles.centered}>
-                  <Icon name="sad-tear" size={40} color="#FF6347" />
-                  <Text style={styles.errorText}>
-                    No se encontraron dispositivos Shelly
-                  </Text>
-                </View>
-              }
+              renderItem={({ item }) => {
+                const deviceMac = extractMacFromSSID(item.SSID);
+                const isRegistered = deviceMac ? registeredMacs.has(deviceMac) : false;
+                
+                return (
+                  <TouchableOpacity 
+                    style={[
+                      styles.deviceItem,
+                      isRegistered && {opacity: 0.5, borderColor: '#666'}
+                    ]} 
+                    onPress={() => handleDeviceSelection(item)}
+                    disabled={isRegistered}
+                  >
+                    <Icon 
+                      name={isRegistered ? "check-circle" : "wifi"} 
+                      size={24} 
+                      color={isRegistered ? "#888" : "#00FF7F"} 
+                    />
+                    <View style={styles.deviceInfo}>
+                      <Text style={styles.deviceName}>
+                        {item.SSID}
+                        {isRegistered && " (Registrado)"}
+                      </Text>
+                      <Text style={styles.deviceId}>
+                        Señal: {item.level} dBm
+                        {deviceMac && ` • MAC: ${deviceMac}`}
+                      </Text>
+                    </View>
+                    {!isRegistered && (
+                      <Icon name="chevron-right" size={16} color="#00FF7F" />
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
+              contentContainerStyle={{paddingHorizontal: 20}}
             />
-            <TouchableOpacity 
-              style={[styles.button, {marginBottom: 20}]} 
-              onPress={scanForShellyNetworks}
-            >
-              <Text style={styles.buttonText}>🔄 Buscar de nuevo</Text>
-            </TouchableOpacity>
+            
+            <View style={{padding: 20}}>
+              <TouchableOpacity 
+                style={styles.button} 
+                onPress={scanForShellyNetworks}
+              >
+                <Icon name="sync-alt" size={16} color="#0A192F" style={{marginRight: 8}} />
+                <Text style={styles.buttonText}>Buscar de Nuevo</Text>
+              </TouchableOpacity>
+            </View>
           </SafeAreaView>
         );
 
@@ -452,12 +600,15 @@ const AddDeviceScreen = ({ navigation }: AddDeviceScreenProps) => {
         return (
           <View style={styles.centered}>
             <Icon name="check-circle" size={80} color="#00FF7F" />
-            <Text style={styles.successText}>¡Dispositivo configurado!</Text>
+            <Text style={styles.successText}>¡Dispositivo Configurado!</Text>
             <Text style={styles.loadingText}>
-              Tu Shelly ahora está conectado a tu red WiFi
+              Tu Shelly ahora está conectado a tu red WiFi y registrado en EcoWatt.
             </Text>
-            <TouchableOpacity style={styles.button} onPress={() => navigation.goBack()}>
-              <Text style={styles.buttonText}>Volver</Text>
+            <Text style={[styles.loadingText, {fontSize: 14, marginTop: 10, color: '#888'}]}>
+              Comenzará a enviar datos de consumo en unos minutos.
+            </Text>
+            <TouchableOpacity style={[styles.button, {marginTop: 30}]} onPress={() => navigation.goBack()}>
+              <Text style={styles.buttonText}>Volver al Inicio</Text>
             </TouchableOpacity>
           </View>
         );
@@ -471,7 +622,7 @@ const AddDeviceScreen = ({ navigation }: AddDeviceScreenProps) => {
               style={styles.button} 
               onPress={scanForShellyNetworks}
             >
-              <Text style={styles.buttonText}>Intentar de nuevo</Text>
+              <Text style={styles.buttonText}>Intentar de Nuevo</Text>
             </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.button, {backgroundColor: '#666', marginTop: 10}]} 
